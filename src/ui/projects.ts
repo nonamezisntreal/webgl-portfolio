@@ -1,4 +1,5 @@
 import { getCopy, getProjects, type Locale, type Project } from '../content';
+import { bindMagnetic } from './interactions';
 
 /**
  * Expandable case-study overlay: clicking a project card opens a
@@ -16,6 +17,7 @@ export function initProjectCases(getLocale: () => Locale): void {
   const open = (project: Project) => {
     lastFocused = document.activeElement as HTMLElement;
     body.innerHTML = caseTemplate(project, getLocale());
+    bindMagnetic();
     panel.style.setProperty('--glow', project.glow);
     overlay.classList.add('case--open');
     overlay.setAttribute('aria-hidden', 'false');

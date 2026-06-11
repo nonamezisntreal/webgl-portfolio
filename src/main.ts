@@ -7,7 +7,7 @@ import { initTilt } from './ui/tilt';
 import { initCursor } from './ui/cursor';
 import { initProjectCases } from './ui/projects';
 import { initContactForm } from './ui/contact';
-import { initInteractions } from './ui/interactions';
+import { initInteractions, bindMagnetic } from './ui/interactions';
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const LOCALE_KEY = 'hazard-locale';
@@ -91,6 +91,7 @@ function applyLocale(nextLocale: Locale): void {
 
   renderContent(locale);
   initTilt(reducedMotion);
+  if (!reducedMotion) bindMagnetic();
 }
 
 function initLanguageSwitch(): void {

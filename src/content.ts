@@ -146,6 +146,27 @@ export const copy = {
     },
     projects: [
       {
+        id: 'nooslib',
+        title: 'Nooslib',
+        tagline: 'Цифровая библиотека для чтения DJVU-книг онлайн',
+        description:
+          'Production-платформа на ASP.NET Core: онлайн-читалка DJVU с конвертацией страниц в WebP, Redis-кэшированием, SEO-оптимизацией и Docker-инфраструктурой.',
+        tech: ['ASP.NET Core', '.NET 10', 'EF Core', 'SQL Server', 'Redis', 'Docker', 'Nginx'],
+        year: '2026',
+        glow: '#22d3ee',
+        caseStudy: {
+          challenge:
+            'Читать тяжёлые DJVU-книги прямо в браузере быстро: мгновенная отдача текущей страницы, предзагрузка соседних и индексируемый поисковиками контент.',
+          solution:
+            'Конвейер DjVuLibre рендерит страницы в WebP с файловым кэшем, Redis + IMemoryCache ускоряют метаданные, фоновые сервисы прегенерируют страницы и извлекают текст, а Docker Compose (web, db, redis, nginx, certbot) обеспечивает деплой на VPS.',
+          highlights: [
+            'Онлайн-читалка: страница всегда реальная — из кэша или генерации на лету',
+            'Роли User/Moderator/Admin, загрузка книг, закладки, история чтения',
+            'SEO: Schema.org, Open Graph, sitemap, читаемые URL и серверный вывод текста',
+          ],
+        },
+      },
+      {
         id: 'itstudent',
         title: 'ITstudent',
         tagline: 'Образовательная платформа для изучения программирования',
@@ -269,6 +290,27 @@ export const copy = {
       open: 'Open case study:',
     },
     projects: [
+      {
+        id: 'nooslib',
+        title: 'Nooslib',
+        tagline: 'Digital library for reading DJVU books online',
+        description:
+          'A production ASP.NET Core platform: an online DJVU reader with WebP page conversion, Redis caching, SEO optimization and a Docker-based infrastructure.',
+        tech: ['ASP.NET Core', '.NET 10', 'EF Core', 'SQL Server', 'Redis', 'Docker', 'Nginx'],
+        year: '2026',
+        glow: '#22d3ee',
+        caseStudy: {
+          challenge:
+            'Make heavy DJVU books readable right in the browser, fast: instant delivery of the current page, preloading of neighbours and content search engines can index.',
+          solution:
+            'A DjVuLibre pipeline renders pages to WebP with a file cache, Redis + IMemoryCache speed up metadata, background services pre-generate pages and extract text, and Docker Compose (web, db, redis, nginx, certbot) handles VPS deployment.',
+          highlights: [
+            'Online reader: the page is always real — served from cache or generated on the fly',
+            'User/Moderator/Admin roles, book uploads, bookmarks, reading history',
+            'SEO: Schema.org, Open Graph, sitemap, readable URLs and server-side text output',
+          ],
+        },
+      },
       {
         id: 'itstudent',
         title: 'ITstudent',

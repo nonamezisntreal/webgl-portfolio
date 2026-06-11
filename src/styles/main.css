@@ -100,9 +100,10 @@ body.has-custom-cursor button {
   transition: opacity 0.4s;
 }
 
+/* Magnetic offset is lerped in JS (interactions.ts) — no CSS transition here,
+   otherwise the two smoothing layers fight and the element stutters. */
 [data-magnetic] {
-  translate: var(--mag-x, 0) var(--mag-y, 0);
-  transition-property: translate, transform, box-shadow, border-color, background, color;
+  translate: var(--mag-x, 0px) var(--mag-y, 0px);
 }
 
 main {
@@ -994,6 +995,8 @@ html[lang='en'] .lang-toggle::before { transform: translateX(100%); }
 .contact__links { display: grid; gap: 0.8rem; }
 
 .contact__link {
+  position: relative;
+  overflow: hidden;
   display: flex;
   justify-content: space-between;
   align-items: baseline;
