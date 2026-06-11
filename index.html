@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hazard — Full-stack разработчик</title>
+  <meta name="description" content="Full-stack разработчик: интерактивные WebGL-интерфейсы, ASP.NET/React-продукты и аккуратная инженерная архитектура." />
+  <meta name="theme-color" content="#06060b" />
+  <link rel="icon" type="image/svg+xml" href="/webgl-portfolio/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script type="module" crossorigin src="/webgl-portfolio/assets/index-Dz70xvNV.js"></script>
+  <link rel="stylesheet" crossorigin href="/webgl-portfolio/assets/index-C12zQEiI.css">
+</head>
+<body>
+  <!-- ======== Loader ======== -->
+  <div class="loader" id="loader" aria-hidden="true">
+    <div class="loader__core">
+      <span class="loader__ring"></span>
+      <span class="loader__count" id="loader-count">0</span>
+    </div>
+    <p class="loader__label" id="loader-label">инициализация experience</p>
+  </div>
+
+  <!-- ======== WebGL layer (fixed, behind everything) ======== -->
+  <canvas id="gl" aria-hidden="true"></canvas>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="pointer-aura" aria-hidden="true"></div>
+
+  <!-- ======== Custom cursor ======== -->
+  <div class="cursor" id="cursor" aria-hidden="true">
+    <div class="cursor__dot"></div>
+    <div class="cursor__ring"></div>
+  </div>
+
+  <!-- ======== Header ======== -->
+  <header class="header" id="header">
+    <a class="header__logo" href="#hero" data-cursor="link" data-magnetic>
+      <span class="header__mark">◆</span> hazard<span class="accent">.dev</span>
+    </a>
+    <nav class="header__nav" aria-label="Primary">
+      <a href="#about" data-cursor="link" id="nav-about">Обо мне</a>
+      <a href="#projects" data-cursor="link" id="nav-projects">Проекты</a>
+      <a href="#skills" data-cursor="link" id="nav-skills">Навыки</a>
+      <a href="#contact" data-cursor="link" id="nav-contact">Контакты</a>
+    </nav>
+    <div class="header__actions">
+      <button class="lang-toggle" id="lang-toggle" type="button" data-cursor="link" data-magnetic aria-label="Switch language">
+        <span class="lang-toggle__option is-active" data-lang-pill="ru">RU</span>
+        <span class="lang-toggle__option" data-lang-pill="en">EN</span>
+      </button>
+      <a class="header__cta" href="#contact" data-cursor="link" data-magnetic id="nav-cta">Связаться</a>
+    </div>
+    <span class="header__progress" id="progress"></span>
+  </header>
+
+  <main id="content">
+    <!-- ======== Hero ======== -->
+    <section class="hero section" id="hero" data-scene="hero">
+      <div class="hero__inner">
+        <p class="hero__eyebrow reveal" data-rv><span class="pulse-dot"></span> <span id="hero-eyebrow">доступен для проектов</span></p>
+        <h1 class="hero__title">
+          <span class="hero__line reveal" data-rv style="--i:1" id="hero-line-1">Full-stack</span>
+          <span class="hero__line hero__line--accent reveal" data-rv style="--i:2"><span id="hero-line-2">Developer</span><span class="hero__caret">_</span></span>
+        </h1>
+        <p class="hero__tagline reveal" data-rv style="--i:3" id="hero-tagline">
+          Создаю full-stack продукты, интерактивные WebGL-сцены и интерфейсы, которые ощущаются <em>живыми</em>.
+        </p>
+        <div class="hero__actions reveal" data-rv style="--i:4">
+          <a class="btn btn--primary" href="#projects" data-cursor="link" data-magnetic id="hero-primary">
+            Смотреть проекты <span class="btn__arrow">→</span>
+          </a>
+          <a class="btn btn--ghost" href="#contact" data-cursor="link" data-magnetic id="hero-secondary">Связаться</a>
+        </div>
+      </div>
+      <div class="hero__scrollhint reveal" data-rv style="--i:5" aria-hidden="true">
+        <span class="hero__mouse"><span class="hero__wheel"></span></span>
+        <span id="hero-scroll">скролль, чтобы исследовать</span>
+      </div>
+      <div class="hero__meta" aria-hidden="true">
+        <span id="hero-meta">UTC+05 · удалённо</span>
+        <span id="hero-fps">60 fps</span>
+      </div>
+    </section>
+
+    <!-- ======== About ======== -->
+    <section class="about section" id="about" data-scene="about">
+      <div class="section__head reveal" data-rv>
+        <span class="section__index">01</span>
+        <h2 class="section__title" id="about-title">Обо мне</h2>
+      </div>
+      <div class="about__grid">
+        <div class="about__text reveal" data-rv style="--i:1">
+          <p class="about__lead" id="about-lead">
+            Я <strong>Hazard</strong> — full-stack разработчик, которому важно место, где инженерия встречается с визуальным опытом.
+          </p>
+          <p id="about-body">
+            Делаю веб-продукты от серверной логики до интерфейса: ASP.NET/C#, React/TypeScript, базы данных, realtime UI и WebGL.
+          </p>
+          <p class="about__quote" id="about-quote">“Сайт не должен просто читаться. Он должен ощущаться.”</p>
+        </div>
+        <div class="about__cards">
+          <div class="about__card reveal" data-rv style="--i:2" data-tilt>
+            <span class="about__card-icon">⚡</span>
+            <h3 id="about-card-performance-title">Производительность</h3>
+            <p id="about-card-performance-text">60fps — база, а не цель.</p>
+          </div>
+          <div class="about__card reveal" data-rv style="--i:3" data-tilt>
+            <span class="about__card-icon">✦</span>
+            <h3 id="about-card-creativity-title">Интерактив</h3>
+            <p id="about-card-creativity-text">WebGL, свет, физика и живые реакции интерфейса.</p>
+          </div>
+          <div class="about__card reveal" data-rv style="--i:4" data-tilt>
+            <span class="about__card-icon">▣</span>
+            <h3 id="about-card-architecture-title">Архитектура</h3>
+            <p id="about-card-architecture-text">Модульный, типизированный, масштабируемый код.</p>
+          </div>
+        </div>
+      </div>
+      <div class="about__stack reveal" data-rv style="--i:5" id="about-stack">
+        <!-- chips injected from content.ts -->
+      </div>
+    </section>
+
+    <!-- ======== Services ======== -->
+    <section class="services section" id="services" data-scene="services">
+      <div class="section__head reveal" data-rv>
+        <span class="section__index">02</span>
+        <h2 class="section__title" id="services-title">Чем занимаюсь</h2>
+      </div>
+      <div class="services__grid" id="services-grid">
+        <!-- cards injected from content.ts -->
+      </div>
+    </section>
+
+    <!-- ======== Projects ======== -->
+    <section class="projects section" id="projects" data-scene="projects">
+      <div class="section__head reveal" data-rv>
+        <span class="section__index">03</span>
+        <h2 class="section__title" id="projects-title">Работы</h2>
+      </div>
+      <div class="projects__grid" id="projects-grid">
+        <!-- cards injected from content.ts -->
+      </div>
+    </section>
+
+    <!-- ======== Process ======== -->
+    <section class="process section" id="process" data-scene="process">
+      <div class="section__head reveal" data-rv>
+        <span class="section__index">04</span>
+        <h2 class="section__title" id="process-title">Как я работаю</h2>
+      </div>
+      <div class="process__line" aria-hidden="true"></div>
+      <div class="process__grid" id="process-grid">
+        <!-- steps injected from content.ts -->
+      </div>
+    </section>
+
+    <!-- ======== Marquee divider ======== -->
+    <div class="marquee" aria-hidden="true">
+      <div class="marquee__track" id="marquee-track">
+        <!-- words injected from content.ts -->
+      </div>
+    </div>
+
+    <!-- ======== Skills ======== -->
+    <section class="skills section" id="skills" data-scene="skills">
+      <div class="section__head reveal" data-rv>
+        <span class="section__index">05</span>
+        <h2 class="section__title" id="skills-title">Навыки &amp; стек</h2>
+      </div>
+      <div class="skills__grid" id="skills-grid">
+        <!-- tiles injected from content.ts -->
+      </div>
+    </section>
+
+    <!-- ======== Contact ======== -->
+    <section class="contact section" id="contact" data-scene="contact">
+      <div class="section__head reveal" data-rv>
+        <span class="section__index">06</span>
+        <h2 class="section__title" id="contact-title">Контакты</h2>
+      </div>
+      <div class="contact__grid">
+        <div class="contact__info reveal" data-rv style="--i:1">
+          <h3 class="contact__pitch" id="contact-pitch">Есть идея, которая должна<br /><span class="accent-gradient">ощущаться живой?</span></h3>
+          <p id="contact-text">Открыт к проектам, коллаборациям и full-time возможностям.</p>
+          <div class="contact__links" id="contact-links">
+            <!-- links injected from content.ts -->
+          </div>
+        </div>
+        <form class="contact__form reveal" data-rv style="--i:2" id="contact-form">
+          <label class="field">
+            <span class="field__label" id="form-name-label">Имя</span>
+            <input class="field__input" type="text" name="name" placeholder="Ваше имя" required autocomplete="name" id="form-name-input" />
+          </label>
+          <label class="field">
+            <span class="field__label" id="form-email-label">Email</span>
+            <input class="field__input" type="email" name="email" placeholder="you@email.com" required autocomplete="email" id="form-email-input" />
+          </label>
+          <label class="field">
+            <span class="field__label" id="form-message-label">Сообщение</span>
+            <textarea class="field__input field__input--area" name="message" rows="4" placeholder="Расскажите о проекте…" required id="form-message-input"></textarea>
+          </label>
+          <button class="btn btn--primary contact__submit" type="submit" data-cursor="link" data-magnetic id="form-submit">
+            Отправить <span class="btn__arrow">→</span>
+          </button>
+          <p class="contact__sent" id="contact-sent" hidden>✦ Открываю почтовый клиент…</p>
+        </form>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>© <span id="year"></span> Hazard · <span id="footer-built">Собрано на Three.js &amp; TypeScript</span></span>
+      <a href="#hero" data-cursor="link" id="footer-top">Наверх ↑</a>
+    </footer>
+  </main>
+
+  <!-- ======== Project case overlay ======== -->
+  <div class="case" id="case" aria-hidden="true">
+    <div class="case__backdrop" id="case-backdrop"></div>
+    <article class="case__panel" id="case-panel" role="dialog" aria-modal="true">
+      <button class="case__close" id="case-close" aria-label="Close case" data-cursor="link">✕</button>
+      <div class="case__body" id="case-body"></div>
+    </article>
+  </div>
+
+</body>
+</html>
