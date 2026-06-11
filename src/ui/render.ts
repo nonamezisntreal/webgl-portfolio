@@ -62,7 +62,6 @@ function renderContactLinks(): void {
   const links = [
     { label: 'Email', value: profile.email, href: `mailto:${profile.email}` },
     { label: 'GitHub', value: profile.github.replace('https://', ''), href: profile.github },
-    { label: 'LinkedIn', value: profile.linkedin.replace('https://', ''), href: profile.linkedin },
     { label: 'Telegram', value: profile.telegram.replace('https://', ''), href: profile.telegram },
   ];
   host.innerHTML = links

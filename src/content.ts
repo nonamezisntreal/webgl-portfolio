@@ -26,10 +26,9 @@ export interface Project {
 export const profile = {
   name: 'Hazard',
   role: 'Creative Developer · WebGL Engineer',
-  email: 'hello@hazard.dev',
+  email: 'nikita04tar@gmail.com',
   github: 'https://github.com/nonamezisntreal',
-  linkedin: 'https://linkedin.com/in/your-profile',
-  telegram: 'https://t.me/your-handle',
+  telegram: 'https://t.me/JustNikitafornow',
 };
 
 export const stack = [
@@ -156,5 +155,5 @@ export const skills: { name: string; level: string; icon: string }[] = [
   { name: 'Performance', level: 'Expert', icon: '⚡' },
   { name: 'Motion Design', level: 'Advanced', icon: '◐' },
   { name: 'CI / DevOps', level: 'Comfortable', icon: '⛭' },
-  { name: 'Unity', level: 'Comfortable', icon: '◇' },
+  { name: 'Web Performance', level: 'Advanced', icon: '◇' },
 ];
