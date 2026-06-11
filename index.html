@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hazard — Creative Developer · WebGL Engineer</title>
+  <meta name="description" content="Creative developer crafting interactive WebGL experiences, real-time graphics and premium interfaces." />
+  <meta name="theme-color" content="#06060b" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <!-- ======== Loader ======== -->
+  <div class="loader" id="loader" aria-hidden="true">
+    <div class="loader__core">
+      <span class="loader__ring"></span>
+      <span class="loader__count" id="loader-count">0</span>
+    </div>
+    <p class="loader__label">initializing experience</p>
+  </div>
+
+  <!-- ======== WebGL layer (fixed, behind everything) ======== -->
+  <canvas id="gl" aria-hidden="true"></canvas>
+  <div class="grain" aria-hidden="true"></div>
+
+  <!-- ======== Custom cursor ======== -->
+  <div class="cursor" id="cursor" aria-hidden="true">
+    <div class="cursor__dot"></div>
+    <div class="cursor__ring"></div>
+  </div>
+
+  <!-- ======== Header ======== -->
+  <header class="header" id="header">
+    <a class="header__logo" href="#hero" data-cursor="link">
+      <span class="header__mark">◆</span> hazard<span class="accent">.dev</span>
+    </a>
+    <nav class="header__nav" aria-label="Primary">
+      <a href="#about" data-cursor="link">About</a>
+      <a href="#projects" data-cursor="link">Projects</a>
+      <a href="#skills" data-cursor="link">Skills</a>
+      <a href="#contact" data-cursor="link">Contact</a>
+    </nav>
+    <a class="header__cta" href="#contact" data-cursor="link">Let's talk</a>
+    <span class="header__progress" id="progress"></span>
+  </header>
+
+  <main id="content">
+    <!-- ======== Hero ======== -->
+    <section class="hero section" id="hero" data-scene="hero">
+      <div class="hero__inner">
+        <p class="hero__eyebrow reveal" data-rv><span class="pulse-dot"></span> available for projects</p>
+        <h1 class="hero__title">
+          <span class="hero__line reveal" data-rv style="--i:1">Creative</span>
+          <span class="hero__line hero__line--accent reveal" data-rv style="--i:2">Developer<span class="hero__caret">_</span></span>
+        </h1>
+        <p class="hero__tagline reveal" data-rv style="--i:3">
+          I build interactive WebGL experiences, real-time graphics
+          and interfaces that feel <em>alive</em>.
+        </p>
+        <div class="hero__actions reveal" data-rv style="--i:4">
+          <a class="btn btn--primary" href="#projects" data-cursor="link">
+            View Work <span class="btn__arrow">→</span>
+          </a>
+          <a class="btn btn--ghost" href="#contact" data-cursor="link">Get in touch</a>
+        </div>
+      </div>
+      <div class="hero__scrollhint reveal" data-rv style="--i:5" aria-hidden="true">
+        <span class="hero__mouse"><span class="hero__wheel"></span></span>
+        <span>scroll to explore</span>
+      </div>
+      <div class="hero__meta" aria-hidden="true">
+        <span>UTC+05 · remote-friendly</span>
+        <span id="hero-fps">60 fps</span>
+      </div>
+    </section>
+
+    <!-- ======== About ======== -->
+    <section class="about section" id="about" data-scene="about">
+      <div class="section__head reveal" data-rv>
+        <span class="section__index">01</span>
+        <h2 class="section__title">About</h2>
+      </div>
+      <div class="about__grid">
+        <div class="about__text reveal" data-rv style="--i:1">
+          <p class="about__lead">
+            I'm <strong>Hazard</strong> — a creative developer obsessed with the point
+            where engineering meets art direction.
+          </p>
+          <p>
+            For the last years I've been crafting real-time graphics, GPU-driven
+            interfaces and interactive products. From custom GLSL shaders to
+            full-stack apps — I care about every millisecond and every pixel.
+          </p>
+          <p class="about__quote">“A site shouldn't just be read. It should be felt.”</p>
+        </div>
+        <div class="about__cards">
+          <div class="about__card reveal" data-rv style="--i:2" data-tilt>
+            <span class="about__card-icon">⚡</span>
+            <h3>Performance</h3>
+            <p>60fps is the baseline, not the goal. Profiling, batching, GPU instancing — speed is a feature.</p>
+          </div>
+          <div class="about__card reveal" data-rv style="--i:3" data-tilt>
+            <span class="about__card-icon">✦</span>
+            <h3>Creativity</h3>
+            <p>Generative visuals, physics, light and motion design — turning interfaces into experiences.</p>
+          </div>
+          <div class="about__card reveal" data-rv style="--i:4" data-tilt>
+            <span class="about__card-icon">▣</span>
+            <h3>Architecture</h3>
+            <p>Modular, typed, scalable code. The UI layer and the render loop never fight each other.</p>
+          </div>
+        </div>
+      </div>
+      <div class="about__stack reveal" data-rv style="--i:5" id="about-stack">
+        <!-- chips injected from content.ts -->
+      </div>
+    </section>
+
+    <!-- ======== Projects ======== -->
+    <section class="projects section" id="projects" data-scene="projects">
+      <div class="section__head reveal" data-rv>
+        <span class="section__index">02</span>
+        <h2 class="section__title">Selected Work</h2>
+      </div>
+      <div class="projects__grid" id="projects-grid">
+        <!-- cards injected from content.ts -->
+      </div>
+    </section>
+
+    <!-- ======== Skills ======== -->
+    <section class="skills section" id="skills" data-scene="skills">
+      <div class="section__head reveal" data-rv>
+        <span class="section__index">03</span>
+        <h2 class="section__title">Skills &amp; Tech</h2>
+      </div>
+      <div class="skills__grid" id="skills-grid">
+        <!-- tiles injected from content.ts -->
+      </div>
+    </section>
+
+    <!-- ======== Contact ======== -->
+    <section class="contact section" id="contact" data-scene="contact">
+      <div class="section__head reveal" data-rv>
+        <span class="section__index">04</span>
+        <h2 class="section__title">Contact</h2>
+      </div>
+      <div class="contact__grid">
+        <div class="contact__info reveal" data-rv style="--i:1">
+          <h3 class="contact__pitch">Have an idea that needs<br /><span class="accent-gradient">to feel alive?</span></h3>
+          <p>Open to freelance projects, collaborations and full-time opportunities.</p>
+          <div class="contact__links" id="contact-links">
+            <!-- links injected from content.ts -->
+          </div>
+        </div>
+        <form class="contact__form reveal" data-rv style="--i:2" id="contact-form">
+          <label class="field">
+            <span class="field__label">Name</span>
+            <input class="field__input" type="text" name="name" placeholder="Your name" required autocomplete="name" />
+          </label>
+          <label class="field">
+            <span class="field__label">Email</span>
+            <input class="field__input" type="email" name="email" placeholder="you@email.com" required autocomplete="email" />
+          </label>
+          <label class="field">
+            <span class="field__label">Message</span>
+            <textarea class="field__input field__input--area" name="message" rows="4" placeholder="Tell me about your project…" required></textarea>
+          </label>
+          <button class="btn btn--primary contact__submit" type="submit" data-cursor="link">
+            Send message <span class="btn__arrow">→</span>
+          </button>
+          <p class="contact__sent" id="contact-sent" hidden>✦ Opening your mail client…</p>
+        </form>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>© <span id="year"></span> Hazard · Built with Three.js &amp; TypeScript</span>
+      <a href="#hero" data-cursor="link">Back to top ↑</a>
+    </footer>
+  </main>
+
+  <!-- ======== Project case overlay ======== -->
+  <div class="case" id="case" aria-hidden="true">
+    <div class="case__backdrop" id="case-backdrop"></div>
+    <article class="case__panel" id="case-panel" role="dialog" aria-modal="true">
+      <button class="case__close" id="case-close" aria-label="Close case" data-cursor="link">✕</button>
+      <div class="case__body" id="case-body"></div>
+    </article>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
