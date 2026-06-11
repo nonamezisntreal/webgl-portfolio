@@ -5,9 +5,10 @@
 export function initTilt(reducedMotion: boolean): void {
   if (reducedMotion || !window.matchMedia('(pointer: fine)').matches) return;
 
-  const cards = document.querySelectorAll<HTMLElement>('[data-tilt]');
+  const cards = document.querySelectorAll<HTMLElement>('[data-tilt]:not([data-tilt-bound])');
 
   for (const card of cards) {
+    card.dataset.tiltBound = 'true';
     let raf = 0;
 
     const onMove = (e: PointerEvent) => {

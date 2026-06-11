@@ -1,10 +1,10 @@
-import { profile } from '../content';
+import { getCopy, profile, type Locale } from '../content';
 
 /**
  * Minimal contact form — composes a mailto: draft so the site
  * needs no backend. Swap for your form endpoint if you have one.
  */
-export function initContactForm(): void {
+export function initContactForm(getLocale: () => Locale): void {
   const form = document.getElementById('contact-form') as HTMLFormElement | null;
   const sent = document.getElementById('contact-sent');
   if (!form) return;
@@ -15,8 +15,9 @@ export function initContactForm(): void {
     const name = String(data.get('name') ?? '');
     const email = String(data.get('email') ?? '');
     const message = String(data.get('message') ?? '');
+    const formCopy = getCopy(getLocale()).contact.form;
 
-    const subject = encodeURIComponent(`Portfolio inquiry from ${name}`);
+    const subject = encodeURIComponent(`${formCopy.subject} ${name}`);
     const bodyText = encodeURIComponent(`${message}\n\n— ${name}\n${email}`);
     window.location.href = `mailto:${profile.email}?subject=${subject}&body=${bodyText}`;
 

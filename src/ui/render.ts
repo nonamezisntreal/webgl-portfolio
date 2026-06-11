@@ -1,11 +1,11 @@
-import { profile, projects, skills, stack, type Project } from '../content';
+import { getCopy, getProjects, profile, skills, stack, type Locale, type Project } from '../content';
 
 /** Inject all dynamic content (stack chips, project cards, skills, links) into the DOM. */
-export function renderContent(): void {
+export function renderContent(locale: Locale): void {
   renderStack();
-  renderProjects();
-  renderSkills();
-  renderContactLinks();
+  renderProjects(locale);
+  renderSkills(locale);
+  renderContactLinks(locale);
   const year = document.getElementById('year');
   if (year) year.textContent = String(new Date().getFullYear());
 }
@@ -18,15 +18,16 @@ function renderStack(): void {
     .join('');
 }
 
-function renderProjects(): void {
+function renderProjects(locale: Locale): void {
   const host = document.getElementById('projects-grid');
   if (!host) return;
-  host.innerHTML = projects.map(projectCard).join('');
+  const labels = getCopy(locale).caseLabels;
+  host.innerHTML = getProjects(locale).map((p, i) => projectCard(p, i, labels.open)).join('');
 }
 
-function projectCard(p: Project, i: number): string {
+function projectCard(p: Project, i: number, openLabel: string): string {
   return `
-  <article class="project reveal" data-rv data-tilt data-project="${p.id}" style="--i:${i + 1};--glow:${p.glow}" tabindex="0" role="button" aria-label="Open case study: ${p.title}">
+  <article class="project reveal in" data-rv data-tilt data-project="${p.id}" style="--i:${i + 1};--glow:${p.glow}" tabindex="0" role="button" aria-label="${openLabel} ${p.title}">
     <div class="project__glow"></div>
     <header class="project__head">
       <span class="project__year">${p.year}</span>
@@ -41,33 +42,34 @@ function projectCard(p: Project, i: number): string {
   </article>`;
 }
 
-function renderSkills(): void {
+function renderSkills(locale: Locale): void {
   const host = document.getElementById('skills-grid');
   if (!host) return;
   host.innerHTML = skills
     .map(
       (s, i) => `
-  <div class="skill reveal" data-rv style="--i:${(i % 4) + 1}">
+  <div class="skill reveal in" data-rv style="--i:${(i % 4) + 1}">
     <span class="skill__icon" aria-hidden="true">${s.icon}</span>
     <span class="skill__name">${s.name}</span>
-    <span class="skill__level">${s.level}</span>
+    <span class="skill__level">${s.level[locale]}</span>
   </div>`,
     )
     .join('');
 }
 
-function renderContactLinks(): void {
+function renderContactLinks(locale: Locale): void {
   const host = document.getElementById('contact-links');
   if (!host) return;
+  const labels = getCopy(locale).contact.labels;
   const links = [
-    { label: 'Email', value: profile.email, href: `mailto:${profile.email}` },
-    { label: 'GitHub', value: profile.github.replace('https://', ''), href: profile.github },
-    { label: 'Telegram', value: profile.telegram.replace('https://', ''), href: profile.telegram },
+    { label: labels.email, value: profile.email, href: `mailto:${profile.email}` },
+    { label: labels.github, value: profile.github.replace('https://', ''), href: profile.github },
+    { label: labels.telegram, value: profile.telegram.replace('https://', ''), href: profile.telegram },
   ];
   host.innerHTML = links
     .map(
       (l) => `
-  <a class="contact__link" href="${l.href}" target="_blank" rel="noopener noreferrer" data-cursor="link">
+  <a class="contact__link" href="${l.href}" target="_blank" rel="noopener noreferrer" data-cursor="link" data-magnetic>
     <span class="contact__link-label">${l.label}</span>
     <span class="contact__link-value">${l.value} <span aria-hidden="true">↗</span></span>
   </a>`,

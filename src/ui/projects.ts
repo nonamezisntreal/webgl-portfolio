@@ -1,10 +1,10 @@
-import { projects, type Project } from '../content';
+import { getCopy, getProjects, type Locale, type Project } from '../content';
 
 /**
  * Expandable case-study overlay: clicking a project card opens a
  * cinematic panel with the extended write-up.
  */
-export function initProjectCases(): void {
+export function initProjectCases(getLocale: () => Locale): void {
   const overlay = document.getElementById('case')!;
   const panel = document.getElementById('case-panel')!;
   const body = document.getElementById('case-body')!;
@@ -15,7 +15,7 @@ export function initProjectCases(): void {
 
   const open = (project: Project) => {
     lastFocused = document.activeElement as HTMLElement;
-    body.innerHTML = caseTemplate(project);
+    body.innerHTML = caseTemplate(project, getLocale());
     panel.style.setProperty('--glow', project.glow);
     overlay.classList.add('case--open');
     overlay.setAttribute('aria-hidden', 'false');
@@ -33,7 +33,7 @@ export function initProjectCases(): void {
   document.getElementById('projects-grid')?.addEventListener('click', (e) => {
     const card = (e.target as HTMLElement).closest<HTMLElement>('[data-project]');
     if (!card) return;
-    const project = projects.find((p) => p.id === card.dataset.project);
+    const project = getProjects(getLocale()).find((p) => p.id === card.dataset.project);
     if (project) open(project);
   });
 
@@ -42,7 +42,7 @@ export function initProjectCases(): void {
     const card = (e.target as HTMLElement).closest<HTMLElement>('[data-project]');
     if (!card) return;
     e.preventDefault();
-    const project = projects.find((p) => p.id === card.dataset.project);
+    const project = getProjects(getLocale()).find((p) => p.id === card.dataset.project);
     if (project) open(project);
   });
 
@@ -53,7 +53,8 @@ export function initProjectCases(): void {
   });
 }
 
-function caseTemplate(p: Project): string {
+function caseTemplate(p: Project, locale: Locale): string {
+  const labels = getCopy(locale).caseLabels;
   return `
   <span class="case__year">${p.year}</span>
   <h3 class="case__title">${p.title}</h3>
@@ -61,17 +62,17 @@ function caseTemplate(p: Project): string {
   <div class="case__tech">${p.tech.map((t) => `<span>${t}</span>`).join('')}</div>
 
   <div class="case__section">
-    <h4>The challenge</h4>
+    <h4>${labels.challenge}</h4>
     <p>${p.caseStudy.challenge}</p>
   </div>
   <div class="case__section">
-    <h4>The solution</h4>
+    <h4>${labels.solution}</h4>
     <p>${p.caseStudy.solution}</p>
   </div>
   <div class="case__section">
-    <h4>Highlights</h4>
+    <h4>${labels.highlights}</h4>
     <ul>${p.caseStudy.highlights.map((h) => `<li>${h}</li>`).join('')}</ul>
   </div>
-  ${p.caseStudy.link ? `<a class="btn btn--ghost case__link" href="${p.caseStudy.link}" target="_blank" rel="noopener noreferrer">Visit project ↗</a>` : ''}
+  ${p.caseStudy.link ? `<a class="btn btn--ghost case__link" href="${p.caseStudy.link}" target="_blank" rel="noopener noreferrer" data-magnetic>${labels.link}</a>` : ''}
   `;
 }
