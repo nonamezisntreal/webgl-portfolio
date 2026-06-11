@@ -114,7 +114,53 @@ export const copy = {
         },
       },
     },
+    servicesTitle: 'Чем занимаюсь',
+    services: [
+      {
+        icon: '◎',
+        title: 'Веб-приложения на ASP.NET Core',
+        text: 'Продуктовые MVC/API-приложения: EF Core, SQL Server, Identity, кэширование, фоновые сервисы и аккуратная доменная логика.',
+      },
+      {
+        icon: '◈',
+        title: 'Интерактивные WebGL-интерфейсы',
+        text: 'Three.js, кастомные GLSL-шейдеры, scroll-driven сцены и микроанимации, которые держат стабильные 60fps.',
+      },
+      {
+        icon: '⬢',
+        title: 'Боты и автоматизация',
+        text: 'Telegram-боты, парсеры и интеграции: AngleSharp, Playwright, очереди задач и доставка данных в реальном времени.',
+      },
+      {
+        icon: '⛭',
+        title: 'Инфраструктура и деплой',
+        text: 'Docker Compose, Nginx, Redis, CI-сборки и продакшн-окружения на VPS — от кода до работающего сервиса.',
+      },
+    ],
     projectsTitle: 'Работы',
+    processTitle: 'Как я работаю',
+    process: [
+      {
+        num: '01',
+        title: 'Погружение',
+        text: 'Разбираю задачу, пользователей и ограничения. Фиксирую, что считается результатом, до первой строчки кода.',
+      },
+      {
+        num: '02',
+        title: 'Архитектура',
+        text: 'Проектирую данные, модули и API. Решения, которые дорого менять, принимаются осознанно и на старте.',
+      },
+      {
+        num: '03',
+        title: 'Разработка',
+        text: 'Итерации с работающими билдами: типизированный код, ревью собственных решений и постоянная проверка на реальных данных.',
+      },
+      {
+        num: '04',
+        title: 'Полировка',
+        text: 'Производительность, анимации, edge-кейсы и детали интерфейса — то, что отличает «работает» от «ощущается».',
+      },
+    ],
     skillsTitle: 'Навыки & стек',
     contact: {
       title: 'Контакты',
@@ -167,25 +213,45 @@ export const copy = {
         },
       },
       {
-        id: 'itstudent',
-        title: 'ITstudent',
-        tagline: 'Образовательная платформа для изучения программирования',
+        id: 'freelancebot',
+        title: 'FreelanceBot',
+        tagline: 'Telegram-бот и парсеры фриланс-площадок',
         description:
-          'ASP.NET Core MVC-приложение с курсами по Python, JavaScript и C#: страницы теории, практические задания, результаты и динамическая работа со стилями.',
-        tech: ['ASP.NET Core', 'C#', '.NET 9', 'EF Core', 'SQL Server', 'SCSS', 'JavaScript'],
-        year: '2025',
+          'Агрегатор заказов с пяти фриланс-бирж: парсеры на AngleSharp и Playwright, доставка в Telegram, фильтры, статистика и React-панель управления.',
+        tech: ['C#', '.NET', 'Telegram.Bot', 'EF Core', 'React', 'TypeScript', 'Docker'],
+        year: '2026',
         glow: '#67e8f9',
         caseStudy: {
           challenge:
-            'Собрать учебный сайт, где пользователь может выбрать язык, пройти темы, открыть теорию и перейти к практическим заданиям без перегруженного интерфейса.',
+            'Собирать свежие заказы с разных фриланс-площадок в одном месте и мгновенно доставлять их фрилансеру в Telegram — с фильтрами, избранным и статистикой откликов.',
           solution:
-            'Реализована MVC-структура на ASP.NET Core: HomeController маршрутизирует курсы и разделы, подключён EF Core/SQL Server, session state, компиляция SCSS через SharpScss и отдельные представления для тем, теории, упражнений и результата.',
+            'Модульные парсеры (FL.ru, Kwork, Upwork, FreelanceHunt, Weblancer) на AngleSharp и Playwright, ядро на .NET с EF Core, бот на Telegram.Bot с inline-клавиатурами, REST API и веб-панель на React + TypeScript. Отдельно реализован SOCKS5-туннель с ручным TLS-handshake для работы Telegram API через прокси.',
           highlights: [
-            'Курсы по Python, JavaScript и C# с отдельными сценариями и страницами',
-            'Практические quiz-экраны и страница результата',
-            'SCSS → CSS pipeline внутри приложения и кастомные интерактивные JS-эффекты',
+            'Пять парсеров площадок с единым контрактом и дедупликацией заказов',
+            'Inbox, избранное, фильтры по бюджету и ключевым словам, личная статистика',
+            'Кастомный SOCKS5/HTTP CONNECT туннель для Telegram API в обход блокировок',
           ],
-          link: 'https://github.com/nonamezisntreal/ITstudent',
+        },
+      },
+      {
+        id: 'online-school',
+        title: 'Онлайн-школа',
+        tagline: 'Веб-платформа онлайн-обучения на ASP.NET Core MVC',
+        description:
+          'Полноценное приложение онлайн-школы: каталог курсов, уроки с теорией и практикой, личный кабинет с прогрессом и ролевая модель студент / преподаватель / админ.',
+        tech: ['ASP.NET Core MVC', 'C#', 'EF Core', 'SQL Server', 'Identity', 'Bootstrap', 'JavaScript'],
+        year: '2025',
+        glow: '#34d399',
+        caseStudy: {
+          challenge:
+            'Построить платформу, где ученик проходит курс от записи до результата: смотрит уроки, выполняет задания и видит свой прогресс, а преподаватель управляет контентом без участия разработчика.',
+          solution:
+            'Классическая MVC-архитектура на ASP.NET Core: контроллеры курсов, уроков и кабинета, EF Core + SQL Server со связями курс → модуль → урок, ASP.NET Identity с ролями (студент, преподаватель, администратор), Razor-представления и прогресс прохождения с проверочными заданиями.',
+          highlights: [
+            'Каталог курсов с модулями, уроками и пошаговым прохождением',
+            'Личный кабинет: прогресс, результаты заданий, история обучения',
+            'Админ-панель преподавателя: создание курсов и уроков без правок кода',
+          ],
         },
       },
       {
@@ -259,7 +325,53 @@ export const copy = {
         },
       },
     },
+    servicesTitle: 'What I Do',
+    services: [
+      {
+        icon: '◎',
+        title: 'ASP.NET Core web applications',
+        text: 'Production MVC/API apps: EF Core, SQL Server, Identity, caching, background services and clean domain logic.',
+      },
+      {
+        icon: '◈',
+        title: 'Interactive WebGL interfaces',
+        text: 'Three.js, custom GLSL shaders, scroll-driven scenes and micro-animations that hold a steady 60fps.',
+      },
+      {
+        icon: '⬢',
+        title: 'Bots & automation',
+        text: 'Telegram bots, parsers and integrations: AngleSharp, Playwright, task pipelines and real-time data delivery.',
+      },
+      {
+        icon: '⛭',
+        title: 'Infrastructure & deployment',
+        text: 'Docker Compose, Nginx, Redis, CI builds and production VPS environments — from code to a running service.',
+      },
+    ],
     projectsTitle: 'Selected Work',
+    processTitle: 'How I Work',
+    process: [
+      {
+        num: '01',
+        title: 'Discovery',
+        text: 'I break down the task, the users and the constraints — and define what “done” means before the first line of code.',
+      },
+      {
+        num: '02',
+        title: 'Architecture',
+        text: 'Data, modules and APIs are designed up front. Decisions that are expensive to change are made deliberately.',
+      },
+      {
+        num: '03',
+        title: 'Development',
+        text: 'Iterations with working builds: typed code, reviewing my own decisions and constant checks against real data.',
+      },
+      {
+        num: '04',
+        title: 'Polish',
+        text: 'Performance, animation, edge cases and interface details — the difference between “works” and “feels right”.',
+      },
+    ],
     skillsTitle: 'Skills & Tech',
     contact: {
       title: 'Contact',
@@ -312,25 +424,45 @@ export const copy = {
         },
       },
       {
-        id: 'itstudent',
-        title: 'ITstudent',
-        tagline: 'Educational platform for learning programming',
+        id: 'freelancebot',
+        title: 'FreelanceBot',
+        tagline: 'Telegram bot and freelance marketplace parsers',
         description:
-          'An ASP.NET Core MVC app with courses for Python, JavaScript and C#: theory pages, practice exercises, results and dynamic style handling.',
-        tech: ['ASP.NET Core', 'C#', '.NET 9', 'EF Core', 'SQL Server', 'SCSS', 'JavaScript'],
-        year: '2025',
+          'An order aggregator for five freelance marketplaces: AngleSharp and Playwright parsers, Telegram delivery, filters, stats and a React admin panel.',
+        tech: ['C#', '.NET', 'Telegram.Bot', 'EF Core', 'React', 'TypeScript', 'Docker'],
+        year: '2026',
         glow: '#67e8f9',
         caseStudy: {
           challenge:
-            'Create a learning site where users can choose a language, browse topics, read theory and move into practice without a heavy interface.',
+            'Gather fresh orders from multiple freelance marketplaces in one place and deliver them to the freelancer in Telegram instantly — with filters, favourites and response stats.',
           solution:
-            'Built an ASP.NET Core MVC structure: HomeController routes courses and sections, EF Core/SQL Server is configured, session state is enabled, SCSS is compiled through SharpScss and separate views cover topics, theory, exercises and results.',
+            'Modular parsers (FL.ru, Kwork, Upwork, FreelanceHunt, Weblancer) built on AngleSharp and Playwright, a .NET core with EF Core, a Telegram.Bot bot with inline keyboards, a REST API and a React + TypeScript dashboard. A custom SOCKS5 tunnel with a manual TLS handshake keeps the Telegram API reachable through proxies.',
           highlights: [
-            'Python, JavaScript and C# course flows with dedicated pages',
-            'Practice quiz screens and a results page',
-            'SCSS → CSS pipeline inside the app plus custom JS interactions',
+            'Five marketplace parsers behind a single contract with order deduplication',
+            'Inbox, favourites, budget/keyword filters and personal statistics',
+            'Custom SOCKS5 / HTTP CONNECT tunnel for the Telegram API',
           ],
-          link: 'https://github.com/nonamezisntreal/ITstudent',
+        },
+      },
+      {
+        id: 'online-school',
+        title: 'Online School',
+        tagline: 'Online-learning web platform on ASP.NET Core MVC',
+        description:
+          'A complete online-school application: course catalog, lessons with theory and practice, a personal dashboard with progress and a student / teacher / admin role model.',
+        tech: ['ASP.NET Core MVC', 'C#', 'EF Core', 'SQL Server', 'Identity', 'Bootstrap', 'JavaScript'],
+        year: '2025',
+        glow: '#34d399',
+        caseStudy: {
+          challenge:
+            'Build a platform where a student goes from enrollment to results — watching lessons, completing assignments and tracking progress — while teachers manage content without a developer.',
+          solution:
+            'A classic ASP.NET Core MVC architecture: controllers for courses, lessons and the dashboard, EF Core + SQL Server with course → module → lesson relations, ASP.NET Identity with roles (student, teacher, admin), Razor views and step-by-step progress with graded assignments.',
+          highlights: [
+            'Course catalog with modules, lessons and guided progression',
+            'Personal dashboard: progress, assignment results, learning history',
+            'Teacher admin panel: create courses and lessons without code changes',
+          ],
         },
       },
       {

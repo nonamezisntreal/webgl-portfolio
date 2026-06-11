@@ -3,7 +3,10 @@ import { getCopy, getProjects, profile, skills, stack, type Locale, type Project
 /** Inject all dynamic content (stack chips, project cards, skills, links) into the DOM. */
 export function renderContent(locale: Locale): void {
   renderStack();
+  renderServices(locale);
   renderProjects(locale);
+  renderProcess(locale);
+  renderMarquee();
   renderSkills(locale);
   renderContactLinks(locale);
   const year = document.getElementById('year');
@@ -16,6 +19,51 @@ function renderStack(): void {
   host.innerHTML = stack
     .map((tech, i) => `<span class="chip" style="--i:${i}">${tech}</span>`)
     .join('');
+}
+
+function renderServices(locale: Locale): void {
+  const host = document.getElementById('services-grid');
+  if (!host) return;
+  host.innerHTML = getCopy(locale)
+    .services.map(
+      (s, i) => `
+  <div class="service reveal in" data-rv data-tilt style="--i:${i + 1}">
+    <span class="service__icon" aria-hidden="true">${s.icon}</span>
+    <h3 class="service__title">${s.title}</h3>
+    <p class="service__text">${s.text}</p>
+  </div>`,
+    )
+    .join('');
+}
+
+function renderProcess(locale: Locale): void {
+  const host = document.getElementById('process-grid');
+  if (!host) return;
+  host.innerHTML = getCopy(locale)
+    .process.map(
+      (p, i) => `
+  <div class="step reveal in" data-rv style="--i:${i + 1}">
+    <span class="step__num">${p.num}</span>
+    <h3 class="step__title">${p.title}</h3>
+    <p class="step__text">${p.text}</p>
+  </div>`,
+    )
+    .join('');
+}
+
+const marqueeWords = [
+  'WebGL', 'TypeScript', 'ASP.NET Core', 'Three.js', 'GLSL',
+  'React', 'Redis', 'Docker', 'SQL Server', 'Telegram Bots', '60 FPS',
+];
+
+function renderMarquee(): void {
+  const host = document.getElementById('marquee-track');
+  if (!host) return;
+  const seq = marqueeWords
+    .map((w) => `<span class="marquee__word">${w}</span><span class="marquee__dot">✦</span>`)
+    .join('');
+  // duplicated sequence makes the CSS loop seamless
+  host.innerHTML = seq + seq;
 }
 
 function renderProjects(locale: Locale): void {

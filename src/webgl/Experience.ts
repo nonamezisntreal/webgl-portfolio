@@ -89,7 +89,9 @@ export class Experience {
     const offsets: Record<string, [number, number, number]> = {
       hero: [0, 0, 0],
       about: [1.4, 0.25, 0.4],
+      services: [-1.2, -0.2, 0.6],
       projects: [-1.5, 0.35, 0.9],
+      process: [1.3, 0.3, 1.1],
       skills: [1.1, -0.3, 1.3],
       contact: [0, 0.15, 1.7],
     };

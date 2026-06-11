@@ -69,7 +69,9 @@ function applyLocale(nextLocale: Locale): void {
   setText('about-card-architecture-title', t.about.cards.architecture.title);
   setText('about-card-architecture-text', t.about.cards.architecture.text);
 
+  setText('services-title', t.servicesTitle);
   setText('projects-title', t.projectsTitle);
+  setText('process-title', t.processTitle);
   setText('skills-title', t.skillsTitle);
   setText('contact-title', t.contact.title);
   setHtml('contact-pitch', t.contact.pitch);
