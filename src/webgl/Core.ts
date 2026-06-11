@@ -25,6 +25,7 @@ export class Core {
         uColorA: { value: colorA },
         uColorB: { value: colorB },
         uHueShift: { value: 0 },
+        uDim: { value: 1 },
       },
     });
 
@@ -68,17 +69,20 @@ export class Core {
     const u = this.orbMaterial.uniforms;
     u.uTime.value = time;
     u.uMouse.value.lerp(mouse, 0.05);
-    u.uAmp.value = THREE.MathUtils.lerp(u.uAmp.value, 0.25 + scroll * 0.9, 0.04);
+    u.uAmp.value = THREE.MathUtils.lerp(u.uAmp.value, 0.25 + scroll * 0.4, 0.04);
     u.uHueShift.value = THREE.MathUtils.lerp(u.uHueShift.value, scroll, 0.05);
+    // fade the energy down as the user scrolls so content stays readable
+    u.uDim.value = THREE.MathUtils.lerp(u.uDim.value, 1 - scroll * 0.72, 0.05);
 
     this.group.rotation.y = time * 0.08 + mouse.x * 0.25;
     this.group.rotation.x = mouse.y * 0.15 + scroll * 0.6;
 
     const breathe = 1 + Math.sin(time * 0.6) * 0.02;
-    const scale = breathe * (1 - scroll * 0.18);
+    const scale = breathe * (1 - scroll * 0.3);
     this.group.scale.setScalar(scale);
 
-    this.haloMaterial.uniforms.uIntensity.value = 0.45 + Math.sin(time * 0.8) * 0.06 + scroll * 0.15;
+    this.haloMaterial.uniforms.uIntensity.value =
+      (0.45 + Math.sin(time * 0.8) * 0.06) * (1 - scroll * 0.7);
     this.halo.lookAt(0, 0, 10); // keep billboard facing camera direction
   }
 }

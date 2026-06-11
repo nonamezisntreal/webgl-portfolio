@@ -149,8 +149,11 @@ export class Experience {
     // camera: gentle parallax + scroll dolly + section framing
     this.camera.position.x = this.smoothMouse.x * 0.55 + this.sectionOffset.x;
     this.camera.position.y = this.smoothMouse.y * 0.35 + this.sectionOffset.y - this.scroll * 0.4;
-    this.camera.position.z = 6.2 + this.sectionOffset.z + this.scroll * 0.8;
+    this.camera.position.z = 6.2 + this.sectionOffset.z + this.scroll * 2.4;
     this.camera.lookAt(0, 0, 0);
+
+    // calm the glow down while reading content sections
+    this.postfx.setBloomScale(1 - this.scroll * 0.45);
 
     this.core.update(t, this.smoothMouse, this.scroll);
     this.particles.update(t, this.scroll);

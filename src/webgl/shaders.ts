@@ -108,6 +108,7 @@ uniform float uTime;
 uniform vec3 uColorA;
 uniform vec3 uColorB;
 uniform float uHueShift;
+uniform float uDim;
 
 varying vec3 vNormal;
 varying vec3 vViewDir;
@@ -123,10 +124,10 @@ void main() {
   // dark glassy body, glowing rim (bloom picks up the rim)
   vec3 body = base * 0.08;
   vec3 rim  = base * (0.9 + 0.6 * sin(uTime * 0.8 + vNoise * 4.0) * 0.15);
-  vec3 color = body + rim * fresnel * 1.8;
+  vec3 color = body + rim * fresnel * 1.8 * uDim;
 
   // subtle inner energy veins
-  color += base * smoothstep(0.55, 0.95, vNoise) * 0.35;
+  color += base * smoothstep(0.55, 0.95, vNoise) * 0.35 * uDim;
 
   float alpha = clamp(0.18 + fresnel * 0.95, 0.0, 1.0);
   gl_FragColor = vec4(color, alpha);

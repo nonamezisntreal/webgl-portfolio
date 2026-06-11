@@ -13,6 +13,7 @@ export class PostFX {
   private composer: EffectComposer;
   private bloom: UnrealBloomPass;
   private grade: ShaderPass;
+  private baseBloom: number;
 
   constructor(
     renderer: THREE.WebGLRenderer,
@@ -29,6 +30,7 @@ export class PostFX {
       0.85, // radius
       0.18, // threshold
     );
+    this.baseBloom = this.bloom.strength;
     this.composer.addPass(this.bloom);
 
     this.grade = new ShaderPass({
@@ -42,6 +44,11 @@ export class PostFX {
       fragmentShader: gradeFragment,
     });
     this.composer.addPass(this.grade);
+  }
+
+  /** Scale bloom strength (used to calm the scene as the page scrolls). */
+  setBloomScale(scale: number): void {
+    this.bloom.strength = this.baseBloom * scale;
   }
 
   setSize(width: number, height: number, pixelRatio: number): void {
