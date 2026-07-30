@@ -43,6 +43,22 @@ const stalePublicClaims = [
     from: '<span id="hero-fps">60 fps</span>',
     to: '<span id="hero-fps" hidden></span>',
   },
+  {
+    from: 'Локализация RU/EN без перезагрузки страницы',
+    to: 'Отдельные индексируемые RU/EN URL с reciprocal hreflang',
+  },
+  {
+    from: 'RU/EN localization without a page reload',
+    to: 'Separate indexable RU/EN URLs with reciprocal hreflang',
+  },
+  {
+    from: 'Деплой на GitHub Pages через gh-pages branch',
+    to: 'Проверяемый деплой на GitHub Pages через GitHub Actions',
+  },
+  {
+    from: 'GitHub Pages deployment through a gh-pages branch',
+    to: 'Verified GitHub Pages deployment through GitHub Actions',
+  },
 ] as const;
 
 let repairedNavigationPages = 0;
@@ -73,8 +89,12 @@ for (const route of manifest.routes) {
     repairedClaimOccurrences += result.replacements;
   }
 
-  if (/\b60\s*fps\b/i.test(repaired) || /stable\s+60/i.test(repaired)) {
+  if (/\b60\s*fps\b/i.test(repaired) || /stable\s+60/i.test(repaired) || /steady\s+60/i.test(repaired)) {
     throw new Error(`${route.path}: an unverified absolute frame-rate claim remains after finalization.`);
+  }
+
+  if (/gh-pages branch/i.test(repaired) || /без перезагрузки страницы/i.test(repaired) || /without a page reload/i.test(repaired)) {
+    throw new Error(`${route.path}: an obsolete deployment or localization claim remains after finalization.`);
   }
 
   if (repaired !== source) await writeFile(file, repaired, 'utf8');
@@ -84,8 +104,8 @@ if (repairedNavigationPages !== 13) {
   throw new Error(`Expected to finalize navigation for 13 Russian content pages, finalized ${repairedNavigationPages}.`);
 }
 
-if (repairedClaimOccurrences !== 8) {
-  throw new Error(`Expected to replace 8 stale public claim occurrences, replaced ${repairedClaimOccurrences}.`);
+if (repairedClaimOccurrences !== 12) {
+  throw new Error(`Expected to replace 12 stale public claim occurrences, replaced ${repairedClaimOccurrences}.`);
 }
 
 console.log(`Finalized navigation for ${repairedNavigationPages} Russian content pages and replaced ${repairedClaimOccurrences} stale public claim occurrences.`);
