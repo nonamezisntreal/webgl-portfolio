@@ -26,43 +26,19 @@ function replaceAllCount(source: string, from: string, to: string): { value: str
   return { value: replacements ? source.replaceAll(from, to) : source, replacements };
 }
 
-const stalePublicClaims = [
+const legacyHomepageFallbacks = [
   {
     from: '60fps — база, а не цель.',
     to: publicClaims.performanceCard.ru,
   },
   {
-    from: 'Three.js, кастомные GLSL-шейдеры, scroll-driven сцены и микроанимации, которые держат стабильные 60fps.',
-    to: publicClaims.webglServiceSummary.ru,
-  },
-  {
-    from: 'Three.js, custom GLSL shaders, scroll-driven scenes and micro-animations that hold a steady 60fps.',
-    to: publicClaims.webglServiceSummary.en,
-  },
-  {
     from: '<span id="hero-fps">60 fps</span>',
     to: '<span id="hero-fps" hidden></span>',
-  },
-  {
-    from: 'Локализация RU/EN без перезагрузки страницы',
-    to: 'Отдельные индексируемые RU/EN URL с reciprocal hreflang',
-  },
-  {
-    from: 'RU/EN localization without a page reload',
-    to: 'Separate indexable RU/EN URLs with reciprocal hreflang',
-  },
-  {
-    from: 'Деплой на GitHub Pages через gh-pages branch',
-    to: 'Проверяемый деплой на GitHub Pages через GitHub Actions',
-  },
-  {
-    from: 'GitHub Pages deployment through a gh-pages branch',
-    to: 'Verified GitHub Pages deployment through GitHub Actions',
   },
 ] as const;
 
 let repairedNavigationPages = 0;
-let repairedClaimOccurrences = 0;
+let repairedFallbackOccurrences = 0;
 
 for (const route of manifest.routes) {
   const file = routeFile(route.path);
@@ -83,10 +59,10 @@ for (const route of manifest.routes) {
     repairedNavigationPages += 1;
   }
 
-  for (const claim of stalePublicClaims) {
-    const result = replaceAllCount(repaired, claim.from, claim.to);
+  for (const fallback of legacyHomepageFallbacks) {
+    const result = replaceAllCount(repaired, fallback.from, fallback.to);
     repaired = result.value;
-    repairedClaimOccurrences += result.replacements;
+    repairedFallbackOccurrences += result.replacements;
   }
 
   if (/\b60\s*fps\b/i.test(repaired) || /stable\s+60/i.test(repaired) || /steady\s+60/i.test(repaired)) {
@@ -104,8 +80,8 @@ if (repairedNavigationPages !== 13) {
   throw new Error(`Expected to finalize navigation for 13 Russian content pages, finalized ${repairedNavigationPages}.`);
 }
 
-if (repairedClaimOccurrences !== 12) {
-  throw new Error(`Expected to replace 12 stale public claim occurrences, replaced ${repairedClaimOccurrences}.`);
+if (repairedFallbackOccurrences !== 2) {
+  throw new Error(`Expected to replace 2 legacy homepage fallback occurrences, replaced ${repairedFallbackOccurrences}.`);
 }
 
-console.log(`Finalized navigation for ${repairedNavigationPages} Russian content pages and replaced ${repairedClaimOccurrences} stale public claim occurrences.`);
+console.log(`Finalized navigation for ${repairedNavigationPages} Russian content pages and replaced ${repairedFallbackOccurrences} legacy homepage fallbacks.`);
