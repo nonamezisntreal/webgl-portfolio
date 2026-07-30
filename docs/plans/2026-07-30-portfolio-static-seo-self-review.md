@@ -6,8 +6,8 @@ Repository: `nonamezisntreal/webgl-portfolio`
 Base branch: `main`  
 Base commit: `d369cf46ece4794300878888c4ec8dff31a6aec5`  
 Implementation branch: `codex/portfolio-static-seo-01`  
-Reviewed implementation commit: `4c8b3476dde41f2a0eb6cabc2c20d83208e921bc`  
-Reviewed documentation commit: `a378ecb03bc1e3859995d0d91ac973ab807411c8`
+Reviewed implementation commit: `47001512fb99aa72a2c188c0dce2c7228ed47221`  
+Reviewed documentation commit: `b8cdf34a9250646fc5f5d39fddf4e350f6ba90a7`
 
 ## Verdict
 
@@ -37,6 +37,7 @@ This is an implementer self-review. It is not an independent review, owner accep
 - replaced in-place locale mutation with a physical `/en/` route;
 - added public event hooks without introducing an analytics vendor;
 - added verified portfolio deep-link output for later FreelanceBot consumption;
+- normalized generated metadata and file mtimes for a reproducible `dist` file tree;
 - added a pull-request artifact for independent inspection;
 - completed repeated self-review and self-repair cycles.
 
@@ -47,7 +48,7 @@ This is an implementer self-review. It is not an independent review, owner accep
 `src/content.ts` remains canonical for:
 
 - profile contacts;
-- existing homepage copy;
+- homepage copy;
 - project summaries;
 - project case-study data.
 
@@ -58,7 +59,7 @@ This is an implementer self-review. It is not an independent review, owner accep
 - capability tags;
 - relationships between services, cases and insights.
 
-`src/public-claims.ts` is the bounded source for verified public performance wording. It does not duplicate the project registry.
+`src/public-claims.ts` contains the verified public performance, localization and deployment wording referenced directly by the canonical content source. It does not duplicate the project registry.
 
 ### Deployment ownership
 
@@ -70,7 +71,7 @@ This is an implementer self-review. It is not an independent review, owner accep
 
 The complete roadmap combined deployment, routing, localization, content generation, metadata, accessibility, performance and integration concerns.
 
-Repair: the work was implemented as a sequence of internal bounded increments in one branch, with a successful build and artifact inspection after each material change. Merge and deployment remained outside the implementation session.
+Repair: the work was implemented as a sequence of bounded increments in one branch, with a successful build and artifact inspection after each material change. Merge and deployment remained outside the implementation session.
 
 ### SR-002 — HIGH — No isolated implementation branch existed
 
@@ -96,7 +97,7 @@ Repair: the root URL is always Russian, English has a physical `/en/` document, 
 
 ### SR-006 — HIGH — Static content pages could accidentally inherit the WebGL runtime
 
-Repair: service, case and insight pages are standalone HTML documents without module scripts or Three.js references. CI fails if either appears.
+Repair: service, case and insight pages are standalone HTML documents without module scripts or Three.js assets. CI fails if either appears.
 
 ### SR-007 — MEDIUM — A second project registry could diverge from homepage projects
 
@@ -139,16 +140,17 @@ Independent artifact inspection found six HTML files and eight occurrences of ab
 Repair:
 
 - introduced `src/public-claims.ts`;
+- corrected `src/content.ts`, the canonical public-content source;
 - runtime rendering uses verified performance wording;
-- build finalization replaces the bounded legacy occurrences;
+- the build finalizer repairs only two legacy static homepage fallbacks;
 - `scripts/validate-public-claims.mjs` independently rejects remaining absolute frame-rate claims;
-- CI requires the verified replacement wording in the built artifact.
+- independent artifact inspection includes the JavaScript bundle, not only HTML.
 
 ### SR-015 — HIGH — The WebGL case described obsolete localization and deployment architecture
 
-The case still claimed in-place RU/EN switching and deployment through a `gh-pages` branch.
+The canonical case data still claimed in-place RU/EN switching and deployment through a `gh-pages` branch.
 
-Repair: generated case pages now describe physical indexable RU/EN URLs with reciprocal `hreflang` and GitHub Actions deployment. Independent validation rejects the obsolete wording.
+Repair: `src/content.ts` now references the verified physical-URL and GitHub Actions wording directly. Generated pages and homepage overlays share the same corrected source. Independent validation rejects the obsolete wording in HTML and JavaScript assets.
 
 ### SR-016 — MEDIUM — Crawler and sitemap files existed in competing static/generated forms
 
@@ -164,13 +166,42 @@ README and the initial self-review described only a foundation increment.
 
 Repair: README now documents the 28-route static system, full build pipeline, source boundaries, artifact review and current validation guarantees. This self-review supersedes the reduced-scope document.
 
+### SR-019 — HIGH — Wall-clock metadata prevented reproducible `dist` content
+
+`generatedAt` previously used the current CI time, so documentation-only commits changed generated JSON bytes.
+
+Repair: `scripts/normalize-artifact.mjs` derives `generatedAt` from the maximum versioned route `updatedAt` and normalizes all `dist` mtimes to that value.
+
+### SR-020 — MEDIUM — GitHub wrapper ZIP bytes are not reproducible
+
+Two successful CI runs over identical site inputs produced different GitHub artifact ZIP hashes even after file timestamps were normalized.
+
+Repair and boundary:
+
+- downloaded both artifacts;
+- compared all 38 extracted files by relative path and SHA-256;
+- all 38 file hashes were identical;
+- the GitHub-created ZIP wrapper hashes remained different.
+
+Conclusion: the reproducibility contract applies to the extracted `dist` tree. It does not claim control over GitHub's artifact ZIP wrapper metadata.
+
 ## Verification evidence
 
 ### GitHub Actions
 
-The reviewed implementation commit `4c8b3476dde41f2a0eb6cabc2c20d83208e921bc` completed workflow run `30531814046` successfully.
+Implementation run:
 
-The subsequent documentation commit `a378ecb03bc1e3859995d0d91ac973ab807411c8` completed workflow run `30532019916` successfully.
+- commit: `47001512fb99aa72a2c188c0dce2c7228ed47221`;
+- workflow run: `30532911802`;
+- result: `success`;
+- deploy job: `skipped` as required for a pull request.
+
+Documentation-only reproducibility probe:
+
+- commit: `b8cdf34a9250646fc5f5d39fddf4e350f6ba90a7`;
+- workflow run: `30533011644`;
+- result: `success`;
+- deploy job: `skipped`.
 
 The workflow performs:
 
@@ -182,26 +213,32 @@ The workflow performs:
 - Vite production build;
 - static route generation;
 - homepage hardening;
-- bounded finalization;
+- bounded navigation/fallback finalization;
+- deterministic metadata and mtime normalization;
 - complete artifact validation;
 - independent public-claim validation;
 - PR artifact upload.
 
-### Reviewed artifact
+### Reproducibility evidence
 
-Artifact name:
+Implementation artifact:
 
-`portfolio-dist-4c8b3476dde41f2a0eb6cabc2c20d83208e921bc`
+- artifact ID: `8755423772`;
+- GitHub ZIP digest: `sha256:fea1727b337dd21b99354b971f2b3f55db12349ba8e304b514441e598a03524e`.
 
-Artifact ID:
+Documentation-only probe artifact:
 
-`8754989002`
+- artifact ID: `8755454747`;
+- GitHub ZIP digest: `sha256:2829f4d7f43f2b990b648136c54f5a54cab2f602ebd2b5584247791c8ce877c8`.
 
-Artifact digest reported by GitHub:
+Extracted tree comparison:
 
-`sha256:5f2f80eccb7200b020abdc4957dcb04678f91ddacb696a934de993b1da56feca`
+- files in artifact A: `38`;
+- files in artifact B: `38`;
+- missing or additional paths: `0`;
+- differing file SHA-256 values: `0`.
 
-Independent artifact inspection result:
+### Independent normalized-artifact inspection
 
 - HTML documents: `29`;
 - canonical localized routes: `28`;
@@ -209,7 +246,8 @@ Independent artifact inspection result:
 - route manifest records: `28`;
 - public portfolio link records: `28`;
 - structural errors: `0`;
-- warnings: `0`.
+- stale public claims in HTML: `0`;
+- stale public claims in JavaScript: `0`.
 
 The independent inspection checked:
 
@@ -223,7 +261,9 @@ The independent inspection checked:
 - project-base-path confinement;
 - no module/Three.js runtime on static content pages;
 - no stale absolute performance claims;
-- no obsolete localization/deployment claims.
+- no obsolete localization/deployment claims;
+- deterministic `generatedAt` values;
+- common high-risk secret patterns.
 
 ## Residual gates and unverified claims
 
@@ -240,7 +280,8 @@ These items are intentionally not claimed as complete:
 - Cal.com was not added because no verified owner scheduling URL was available and no URL was invented;
 - no custom domain was selected or configured;
 - the public alias `Hazard` remains the owner-provided identity; legal-name publication remains an owner decision;
-- FreelanceBot runtime has not yet consumed `portfolio-links.json`.
+- FreelanceBot runtime has not yet consumed `portfolio-links.json`;
+- GitHub artifact ZIP wrapper bytes are not claimed to be reproducible.
 
 These are deployment, product-input or independent-review gates rather than failures of the static GitHub Pages candidate.
 
