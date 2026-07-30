@@ -10,13 +10,7 @@ import { initContactForm } from './ui/contact';
 import { initInteractions, bindMagnetic } from './ui/interactions';
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-const LOCALE_KEY = 'hazard-locale';
-let locale: Locale = readInitialLocale();
-
-function readInitialLocale(): Locale {
-  const saved = localStorage.getItem(LOCALE_KEY);
-  return saved === 'en' || saved === 'ru' ? saved : 'ru';
-}
+const locale: Locale = 'ru';
 
 function setText(id: string, value: string): void {
   const el = document.getElementById(id);
@@ -33,12 +27,10 @@ function setPlaceholder(id: string, value: string): void {
   if (el) el.placeholder = value;
 }
 
-function applyLocale(nextLocale: Locale): void {
-  locale = nextLocale;
-  localStorage.setItem(LOCALE_KEY, locale);
-  const t = getCopy(locale);
+function applyLocale(currentLocale: Locale): void {
+  const t = getCopy(currentLocale);
 
-  document.documentElement.lang = locale;
+  document.documentElement.lang = currentLocale;
   document.title = t.meta.title;
   document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute('content', t.meta.description);
 
@@ -88,27 +80,18 @@ function applyLocale(nextLocale: Locale): void {
   setText('footer-top', t.footer.top);
 
   document.querySelectorAll('[data-lang-pill]').forEach((pill) => {
-    pill.classList.toggle('is-active', (pill as HTMLElement).dataset.langPill === locale);
+    pill.classList.toggle('is-active', (pill as HTMLElement).dataset.langPill === currentLocale);
   });
 
-  renderContent(locale);
+  renderContent(currentLocale);
   initTilt(reducedMotion);
   if (!reducedMotion) bindMagnetic();
 }
 
-function initLanguageSwitch(): void {
-  const toggle = document.getElementById('lang-toggle');
-  if (!toggle) return;
-  toggle.addEventListener('click', () => {
-    applyLocale(locale === 'ru' ? 'en' : 'ru');
-  });
-}
-
-/* 1. Inject localized dynamic content first so reveals/tilt can bind to it. */
+/* The root canonical URL is always Russian. English content lives at /en/. */
 applyLocale(locale);
-initLanguageSwitch();
 
-/* 2. UI layer (works even if WebGL fails). */
+/* UI layer works even if WebGL fails. */
 initReveals(reducedMotion);
 initTilt(reducedMotion);
 initCursor(reducedMotion);
@@ -116,7 +99,7 @@ initInteractions(reducedMotion);
 initProjectCases(() => locale);
 initContactForm(() => locale);
 
-/* 3. WebGL layer — lazy-loaded so the UI paints instantly. */
+/* WebGL is lazy-loaded so primary HTML paints immediately. */
 const canvas = document.getElementById('gl') as HTMLCanvasElement;
 const fpsLabel = document.getElementById('hero-fps');
 
@@ -139,7 +122,6 @@ async function boot(): Promise<void> {
     if (reducedMotion) experience.renderOnce();
     else experience.start();
   } catch (err) {
-    // WebGL unavailable → static dark page still works.
     console.warn('WebGL experience disabled:', err);
     canvas.remove();
     initScroll(reducedMotion, { onProgress: () => {}, onSection: () => {} });
@@ -148,7 +130,6 @@ async function boot(): Promise<void> {
   }
 }
 
-/* Loader: counts up while the three.js chunk loads. */
 const loader = document.getElementById('loader');
 const counter = document.getElementById('loader-count');
 let progress = 0;
