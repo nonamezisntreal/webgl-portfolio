@@ -30,7 +30,17 @@ jobs:
       - name: Build and validate
         run: bun run build
         env:
+          SITE_ORIGIN: https://nonamezisntreal.github.io
           BASE_PATH: /${{ github.event.repository.name }}/
+
+      - name: Upload review artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: portfolio-dist-${{ github.event.pull_request.head.sha }}
+          path: dist
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Configure GitHub Pages
         if: github.event_name != 'pull_request'
