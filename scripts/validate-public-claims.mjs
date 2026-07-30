@@ -17,6 +17,9 @@ const forbiddenClaims = [
   { pattern: /\b60\s*fps\b/i, label: 'absolute 60fps claim' },
   { pattern: /stable\s+60/i, label: 'stable 60 claim' },
   { pattern: /steady\s+60/i, label: 'steady 60 claim' },
+  { pattern: /gh-pages branch/i, label: 'obsolete gh-pages deployment claim' },
+  { pattern: /без перезагрузки страницы/i, label: 'obsolete in-place localization claim' },
+  { pattern: /without a page reload/i, label: 'obsolete in-place localization claim' },
 ];
 
 const htmlFiles = await listHtmlFiles(dist);
@@ -30,20 +33,51 @@ for (const file of htmlFiles) {
 }
 
 if (violations.length) {
-  throw new Error(`Unverified public performance claims remain:\n${violations.join('\n')}`);
+  throw new Error(`Unverified or obsolete public claims remain:\n${violations.join('\n')}`);
 }
 
 const rootHtml = await readFile(resolve(dist, 'index.html'), 'utf8');
 const englishHome = await readFile(resolve(dist, 'en', 'index.html'), 'utf8');
-const expectedRussian = 'Профилирование, frame budgets, адаптивная детализация и graceful fallback для слабых устройств.';
-const expectedEnglish = 'Three.js, custom GLSL shaders, scroll-driven scenes and micro-interactions with profiling and an adaptive render budget.';
+const russianCase = await readFile(resolve(dist, 'cases', 'webgl-portfolio', 'index.html'), 'utf8');
+const englishCase = await readFile(resolve(dist, 'en', 'cases', 'webgl-portfolio', 'index.html'), 'utf8');
 
-if (!rootHtml.includes(expectedRussian)) {
-  throw new Error('The verified Russian performance claim is missing from the homepage artifact.');
-}
+const expectedClaims = [
+  {
+    source: rootHtml,
+    value: 'Профилирование, frame budgets, адаптивная детализация и graceful fallback для слабых устройств.',
+    label: 'verified Russian performance claim',
+  },
+  {
+    source: englishHome,
+    value: 'Three.js, custom GLSL shaders, scroll-driven scenes and micro-interactions with profiling and an adaptive render budget.',
+    label: 'verified English WebGL service summary',
+  },
+  {
+    source: russianCase,
+    value: 'Отдельные индексируемые RU/EN URL с reciprocal hreflang',
+    label: 'current Russian localization architecture claim',
+  },
+  {
+    source: englishCase,
+    value: 'Separate indexable RU/EN URLs with reciprocal hreflang',
+    label: 'current English localization architecture claim',
+  },
+  {
+    source: russianCase,
+    value: 'Проверяемый деплой на GitHub Pages через GitHub Actions',
+    label: 'current Russian deployment claim',
+  },
+  {
+    source: englishCase,
+    value: 'Verified GitHub Pages deployment through GitHub Actions',
+    label: 'current English deployment claim',
+  },
+];
 
-if (!englishHome.includes(expectedEnglish)) {
-  throw new Error('The verified English WebGL service summary is missing from the localized homepage artifact.');
+for (const claim of expectedClaims) {
+  if (!claim.source.includes(claim.value)) {
+    throw new Error(`The ${claim.label} is missing from the built artifact.`);
+  }
 }
 
 console.log(`Validated public claims across ${htmlFiles.length} HTML files.`);
