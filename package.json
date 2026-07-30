@@ -11,7 +11,7 @@
     "harden:homepage": "bun scripts/harden-homepage.ts",
     "finalize:static": "bun scripts/finalize-static-site.ts",
     "build": "bun run typecheck && bun run validate:content && vite build && bun run generate:static && bun run harden:homepage && bun run finalize:static && bun run validate:dist",
-    "validate:dist": "node scripts/validate-dist.mjs",
+    "validate:dist": "node scripts/validate-dist.mjs && node scripts/validate-public-claims.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
