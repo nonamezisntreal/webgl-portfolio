@@ -1,5 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { publicClaims } from '../src/public-claims';
 
 interface RouteRecord {
   locale: 'ru' | 'en';
@@ -20,30 +21,71 @@ function routeFile(path: string): string {
   return relative ? resolve(dist, relative, 'index.html') : resolve(dist, 'index.html');
 }
 
-let repairedPages = 0;
+function replaceAllCount(source: string, from: string, to: string): { value: string; replacements: number } {
+  const replacements = source.split(from).length - 1;
+  return { value: replacements ? source.replaceAll(from, to) : source, replacements };
+}
+
+const stalePublicClaims = [
+  {
+    from: '60fps — база, а не цель.',
+    to: publicClaims.performanceCard.ru,
+  },
+  {
+    from: 'Three.js, кастомные GLSL-шейдеры, scroll-driven сцены и микроанимации, которые держат стабильные 60fps.',
+    to: publicClaims.webglServiceSummary.ru,
+  },
+  {
+    from: 'Three.js, custom GLSL shaders, scroll-driven scenes and micro-animations that hold a steady 60fps.',
+    to: publicClaims.webglServiceSummary.en,
+  },
+  {
+    from: '<span id="hero-fps">60 fps</span>',
+    to: '<span id="hero-fps" hidden></span>',
+  },
+] as const;
+
+let repairedNavigationPages = 0;
+let repairedClaimOccurrences = 0;
 
 for (const route of manifest.routes) {
-  if (route.locale !== 'ru' || route.type === 'home') continue;
-
   const file = routeFile(route.path);
   const source = await readFile(file, 'utf8');
-  const casesHref = `${manifest.basePath}#cases`;
-  const insightsHref = `${manifest.basePath}#insights`;
+  let repaired = source;
 
-  if (!source.includes(casesHref) || !source.includes(insightsHref)) {
-    throw new Error(`${route.path}: expected localized navigation targets are missing before finalization.`);
+  if (route.locale === 'ru' && route.type !== 'home') {
+    const casesHref = `${manifest.basePath}#cases`;
+    const insightsHref = `${manifest.basePath}#insights`;
+
+    if (!repaired.includes(casesHref) || !repaired.includes(insightsHref)) {
+      throw new Error(`${route.path}: expected localized navigation targets are missing before finalization.`);
+    }
+
+    repaired = repaired
+      .replaceAll(casesHref, `${manifest.basePath}#projects`)
+      .replaceAll(insightsHref, `${manifest.basePath}#explore`);
+    repairedNavigationPages += 1;
   }
 
-  const repaired = source
-    .replaceAll(casesHref, `${manifest.basePath}#projects`)
-    .replaceAll(insightsHref, `${manifest.basePath}#explore`);
+  for (const claim of stalePublicClaims) {
+    const result = replaceAllCount(repaired, claim.from, claim.to);
+    repaired = result.value;
+    repairedClaimOccurrences += result.replacements;
+  }
 
-  await writeFile(file, repaired, 'utf8');
-  repairedPages += 1;
+  if (/\b60\s*fps\b/i.test(repaired) || /stable\s+60/i.test(repaired)) {
+    throw new Error(`${route.path}: an unverified absolute frame-rate claim remains after finalization.`);
+  }
+
+  if (repaired !== source) await writeFile(file, repaired, 'utf8');
 }
 
-if (repairedPages !== 13) {
-  throw new Error(`Expected to finalize 13 Russian content pages, finalized ${repairedPages}.`);
+if (repairedNavigationPages !== 13) {
+  throw new Error(`Expected to finalize navigation for 13 Russian content pages, finalized ${repairedNavigationPages}.`);
 }
 
-console.log(`Finalized navigation for ${repairedPages} Russian content pages.`);
+if (repairedClaimOccurrences !== 8) {
+  throw new Error(`Expected to replace 8 stale public claim occurrences, replaced ${repairedClaimOccurrences}.`);
+}
+
+console.log(`Finalized navigation for ${repairedNavigationPages} Russian content pages and replaced ${repairedClaimOccurrences} stale public claim occurrences.`);
