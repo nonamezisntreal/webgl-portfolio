@@ -5,6 +5,8 @@ Not just a page — an **experience**: a living energy core that reacts to your 
 
 **Stack:** Three.js · TypeScript · Vite · Lenis · custom GLSL
 
+**Public site:** https://nonamezisntreal.github.io/webgl-portfolio/
+
 ## ✦ Features
 
 - **Living WebGL scene** — noise-displaced energy orb with fresnel glow, orbital rings, crystal shards, 1.6k ambient particles and comet light-trails
@@ -19,14 +21,16 @@ Not just a page — an **experience**: a living energy core that reacts to your 
 ## ▲ Run locally
 
 ```bash
-bun install        # or: npm install
-bun run dev        # or: npm run dev
-bun run build      # type-check + production build
+bun install --frozen-lockfile
+bun run dev
+bun run build
 ```
+
+`bun run build` runs TypeScript validation, creates the Vite production artifact and verifies the GitHub Pages SEO/deployment invariants in `dist/`.
 
 ## ⌬ Personalize
 
-All copy lives in **`src/content.ts`** — name, role, email, social links, stack, projects (with case studies) and skills. Edit that one file and the site is yours. Page title/description are in `index.html`.
+All copy lives in **`src/content.ts`** — name, role, email, social links, stack, projects (with case studies) and skills. Edit that one file and the site is yours. Page title/description and canonical social metadata are in `index.html`.
 
 ## ▣ Architecture
 
@@ -54,14 +58,23 @@ src/
 
 ## ⚡ Deploy
 
-The site is served from the **`gh-pages` branch** via GitHub Pages. To redeploy:
+The canonical deployment pipeline is `.github/workflows/deploy.yml`.
+
+- Pull requests run a frozen Bun install and the full production build/validation pipeline.
+- Pushes to `main` build and publish the `dist/` artifact through GitHub Pages Actions.
+- `BASE_PATH` is set to `/${repository-name}/`, preserving the project-site URL.
+- The historical `gh-pages` branch is not a second source of truth and should not be updated in parallel.
+
+Repository setting required after owner approval:
+
+```text
+Settings → Pages → Build and deployment → Source: GitHub Actions
+```
+
+Manual verification build:
 
 ```bash
 BASE_PATH=/webgl-portfolio/ bun run build
-# then push the dist/ folder to the gh-pages branch
 ```
 
-Prefer CI? A ready-made GitHub Actions workflow is included at
-`docs/github-pages-workflow.yml.example` — move it to `.github/workflows/deploy.yml`
-and set repo Settings → Pages → Source to *GitHub Actions*.
-(It couldn't be pushed automatically because the GitHub App integration lacks the `workflows` permission.)
+The workflow does not change GitHub Pages settings automatically.
