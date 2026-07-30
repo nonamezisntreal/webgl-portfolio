@@ -7,7 +7,8 @@
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "generate:static": "bun scripts/generate-static-site.ts",
-    "build": "bun run typecheck && vite build && bun run generate:static && bun run validate:dist",
+    "harden:homepage": "bun scripts/harden-homepage.ts",
+    "build": "bun run typecheck && vite build && bun run generate:static && bun run harden:homepage && bun run validate:dist",
     "validate:dist": "node scripts/validate-dist.mjs",
     "preview": "vite preview"
   },
