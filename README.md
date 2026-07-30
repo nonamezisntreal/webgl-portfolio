@@ -17,7 +17,8 @@ A dark interactive WebGL homepage plus statically generated service, case-study 
 - generated `sitemap.xml` and `robots.txt`;
 - public `portfolio-links.json` for verified deep-link selection by FreelanceBot;
 - static `404.html`;
-- fail-closed source, public-claim and artifact validation.
+- fail-closed source, public-claim and artifact validation;
+- normalized metadata and mtimes for reproducible PR artifacts.
 
 The current route count is **28 localized canonical pages** plus the 404 document.
 
@@ -55,7 +56,8 @@ TypeScript check
 → Vite asset build
 → localized static page generation
 → homepage performance hardening
-→ localized navigation and public-copy finalization
+→ localized navigation and fallback finalization
+→ deterministic metadata and mtime normalization
 → complete dist and public-claim validation
 ```
 
@@ -65,9 +67,10 @@ There is no second project registry.
 
 - `src/content.ts` remains canonical for profile data, homepage copy, project summaries and project case-study data.
 - `src/static-pages.ts` contains only static routes, extended service/insight content, capability tags and relationships.
-- `src/public-claims.ts` contains the verified public performance wording used to override legacy absolute claims.
+- `src/public-claims.ts` contains verified public performance, localization and deployment wording used by the canonical content source.
 - `scripts/validate-content.ts` binds the content sources and fails on duplicate IDs, broken relationships, missing localization or public-profile drift.
-- `scripts/finalize-static-site.ts` repairs known legacy copy in the generated artifact and fails when the expected bounded repair set changes.
+- `scripts/finalize-static-site.ts` repairs only bounded legacy homepage fallbacks and GitHub Pages navigation compatibility.
+- `scripts/normalize-artifact.mjs` derives `generatedAt` from versioned content dates and normalizes all `dist` mtimes.
 - `scripts/validate-public-claims.mjs` independently rejects obsolete deployment/localization wording and absolute frame-rate promises.
 
 Changing the exact canonical portfolio URL requires an explicit migration because FreelanceBot uses:
@@ -103,7 +106,7 @@ The content pages do not load Three.js or client-side routing. Every public URL 
 The canonical deployment pipeline is `.github/workflows/deploy.yml`.
 
 - Pull requests run a frozen Bun install and the full production build/validation pipeline.
-- Pull requests upload the exact `dist/` candidate for manual artifact review.
+- Pull requests upload the exact normalized `dist/` candidate for manual artifact review.
 - Pushes to `main` build and publish the `dist/` artifact through GitHub Pages Actions.
 - `BASE_PATH` is set to `/${repository-name}/`, preserving the project-site URL.
 - The historical `gh-pages` branch is not a second source of truth and must not be updated in parallel.
@@ -133,4 +136,5 @@ The build fails when any of the following occurs:
 - URL shorteners or tracking parameters in `portfolio-links.json`;
 - absolute `60fps`/stable-frame-rate promises;
 - obsolete in-place localization or `gh-pages branch` claims;
+- non-versioned artifact timestamps;
 - stale crawler or sitemap output.
