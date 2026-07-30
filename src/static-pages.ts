@@ -48,6 +48,7 @@ export interface InsightPageDescriptor {
 export const siteConfig = {
   origin: 'https://nonamezisntreal.github.io',
   basePath: '/webgl-portfolio/',
+  contentUpdatedAt: '2026-07-30',
   publicName: 'Hazard',
   portfolioUrl: 'https://nonamezisntreal.github.io/webgl-portfolio/',
   githubUrl: 'https://github.com/nonamezisntreal',

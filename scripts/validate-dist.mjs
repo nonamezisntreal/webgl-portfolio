@@ -1,17 +1,24 @@
 import { access, readFile, readdir } from 'node:fs/promises';
 import { constants } from 'node:fs';
-import { relative, resolve } from 'node:path';
+import { extname, relative, resolve } from 'node:path';
 
-const dist = resolve(process.cwd(), 'dist');
+const projectRoot = resolve(process.env.PROJECT_ROOT ?? process.cwd());
+const dist = resolve(projectRoot, process.env.DIST_DIR ?? 'dist');
 const canonicalHomepage = 'https://nonamezisntreal.github.io/webgl-portfolio/';
 const requiredFiles = ['index.html', 'robots.txt', 'sitemap.xml', '404.html', 'portfolio-links.json', 'routes-manifest.json'];
+const textExtensions = new Set(['.css', '.html', '.js', '.json', '.svg', '.txt', '.xml']);
+const analyticsBody = "document.addEventListener('click',function(e){var a=e.target.closest('[data-portfolio-event]');if(!a)return;window.dispatchEvent(new CustomEvent('portfolio:event',{detail:{event:a.dataset.portfolioEvent,pageType:document.body.dataset.pageType,pageId:document.body.dataset.pageId,locale:document.documentElement.lang,href:a.href||null}}));});";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-function escapeRegex(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function parseJson(source, label) {
+  try {
+    return JSON.parse(source);
+  } catch (error) {
+    throw new Error(`${label} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 function count(source, pattern) {
@@ -28,20 +35,90 @@ async function listHtmlFiles(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = resolve(directory, entry.name);
     if (entry.isDirectory()) result.push(...await listHtmlFiles(path));
-    else if (entry.name.endsWith('.html')) result.push(path);
+    else if (entry.isFile() && entry.name.endsWith('.html')) result.push(path);
   }
   return result;
 }
 
-function attributes(source, tag, attribute) {
-  const values = [];
-  const tagPattern = new RegExp(`<${tag}\\b[^>]*>`, 'gi');
-  const attributePattern = new RegExp(`\\b${attribute}=["']([^"']+)["']`, 'i');
-  for (const match of source.matchAll(tagPattern)) {
-    const value = match[0].match(attributePattern)?.[1];
-    if (value) values.push(value);
+async function listArtifactFiles(directory) {
+  const result = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) result.push(...await listArtifactFiles(path));
+    else if (entry.isFile()) result.push(path);
   }
-  return values;
+  return result;
+}
+
+function tags(source, tagName) {
+  return [...source.matchAll(new RegExp(`<${tagName}\\b[^>]*>`, 'gi'))].map((match) => match[0]);
+}
+
+function attribute(tag, name) {
+  return tag.match(new RegExp(`\\b${name}=["']([^"']*)["']`, 'i'))?.[1] ?? null;
+}
+
+function attributes(source, tag, name) {
+  return tags(source, tag).map((value) => attribute(value, name)).filter((value) => value !== null);
+}
+
+function canonicalLinks(source) {
+  return tags(source, 'link')
+    .filter((tag) => (attribute(tag, 'rel') ?? '').split(/\s+/).some((token) => token.toLowerCase() === 'canonical'))
+    .map((tag) => ({ tag, href: attribute(tag, 'href') }));
+}
+
+function scriptElements(source) {
+  return [...source.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].map((match) => ({
+    tag: match[0],
+    attributes: match[1],
+    body: match[2],
+  }));
+}
+
+function scriptAttribute(script, name) {
+  return attribute(`<script${script.attributes}>`, name);
+}
+
+function validateCanonical(html, expected, label) {
+  const canonicals = canonicalLinks(html);
+  assert(canonicals.length === 1, `${label}: expected exactly one canonical link, found ${canonicals.length}.`);
+  assert(canonicals[0].href === expected, `${label}: canonical mismatch: ${canonicals[0].href ?? '<missing href>'}.`);
+}
+
+function validateJsonLd(html, label) {
+  const jsonLdScripts = scriptElements(html).filter((script) => (scriptAttribute(script, 'type') ?? '').toLowerCase() === 'application/ld+json');
+  assert(jsonLdScripts.length > 0, `${label}: structured data is missing.`);
+
+  for (const [index, script] of jsonLdScripts.entries()) {
+    assert(script.body.trim().length > 0, `${label}: JSON-LD block ${index + 1} is empty.`);
+    const value = parseJson(script.body, `${label}: JSON-LD block ${index + 1}`);
+    assert(value !== null && typeof value === 'object', `${label}: JSON-LD block ${index + 1} must contain an object or array.`);
+  }
+}
+
+function validateStaticRuntime(html, label, { requireEventHook = true } = {}) {
+  assert(!/<canvas\b/i.test(html), `${label}: static page unexpectedly contains a canvas runtime surface.`);
+  assert(!/<script\b[^>]*\btype=["'](?:module|importmap)["']/i.test(html), `${label}: static page unexpectedly loads a module or import map.`);
+
+  for (const link of tags(html, 'link')) {
+    const rel = (attribute(link, 'rel') ?? '').toLowerCase().split(/\s+/);
+    const as = (attribute(link, 'as') ?? '').toLowerCase();
+    if (rel.includes('modulepreload') || (rel.includes('preload') && as === 'script')) {
+      throw new Error(`${label}: static page unexpectedly preloads a JavaScript runtime.`);
+    }
+  }
+
+  const executableScripts = scriptElements(html).filter((script) => (scriptAttribute(script, 'type') ?? '').toLowerCase() !== 'application/ld+json');
+  const expectedCount = requireEventHook ? 1 : 0;
+  assert(executableScripts.length === expectedCount, `${label}: expected ${expectedCount} bounded executable script(s), found ${executableScripts.length}.`);
+
+  if (requireEventHook) {
+    const script = executableScripts[0];
+    assert(scriptAttribute(script, 'src') === null, `${label}: static event hook must be inline and must not load a runtime asset.`);
+    assert(scriptAttribute(script, 'data-portfolio-runtime') === 'events', `${label}: executable script is not the bounded event hook.`);
+    assert(script.body === analyticsBody, `${label}: bounded event hook bytes changed unexpectedly.`);
+  }
 }
 
 function ids(source) {
@@ -65,24 +142,30 @@ const [rootHtml, robots, sitemap, notFound, registryText, manifestText] = await 
   readFile(resolve(dist, 'routes-manifest.json'), 'utf8'),
 ]);
 
-const registry = JSON.parse(registryText);
-const manifest = JSON.parse(manifestText);
+const registry = parseJson(registryText, 'portfolio-links.json');
+const manifest = parseJson(manifestText, 'routes-manifest.json');
 assert(manifest.basePath === '/webgl-portfolio/', `Unexpected base path: ${manifest.basePath}`);
 assert(manifest.origin === 'https://nonamezisntreal.github.io', `Unexpected site origin: ${manifest.origin}`);
 assert(Array.isArray(manifest.routes), 'Routes manifest is invalid.');
 assert(manifest.routes.length === 28, `Expected 28 localized routes, got ${manifest.routes.length}.`);
 assert(new Set(manifest.routes.map((route) => route.path)).size === manifest.routes.length, 'Routes manifest contains duplicate paths.');
+assert(manifest.routes.every((route) => /^\d{4}-\d{2}-\d{2}$/.test(route.updatedAt)), 'Routes manifest contains an invalid versioned updatedAt value.');
+
+const latestContentDate = manifest.routes.map((route) => route.updatedAt).sort().at(-1);
+const expectedGeneratedAt = `${latestContentDate}T00:00:00.000Z`;
+assert(manifest.generatedAt === expectedGeneratedAt, `Routes manifest generatedAt must be derived from versioned route dates: ${expectedGeneratedAt}.`);
+assert(registry.generatedAt === expectedGeneratedAt, `Portfolio registry generatedAt must be derived from versioned route dates: ${expectedGeneratedAt}.`);
 assert(registry.schemaVersion === 1, 'Unexpected portfolio link registry version.');
 assert(registry.canonicalHomepageUrl === canonicalHomepage, 'Portfolio registry changed the canonical homepage URL.');
+assert(Array.isArray(registry.links), 'Portfolio link registry links are invalid.');
 assert(registry.links.length === manifest.routes.length, 'Portfolio link registry and routes manifest are out of sync.');
 assert(new Set(registry.links.map((item) => item.id)).size === registry.links.length, 'Portfolio registry contains duplicate IDs.');
 assert(new Set(registry.links.map((item) => item.canonicalUrl)).size === registry.links.length, 'Portfolio registry contains duplicate URLs.');
 assert(registry.links.every((item) => item.enabled === true && item.confidentiality === 'public'), 'Generated registry contains a disabled or non-public link.');
 
-const canonicalPattern = new RegExp(`<link\\s+rel=["']canonical["'][^>]+href=["']${escapeRegex(canonicalHomepage)}["']`, 'gi');
-assert(count(rootHtml, canonicalPattern) === 1, 'Homepage must contain one exact canonical link.');
+validateCanonical(rootHtml, canonicalHomepage, 'Homepage');
+validateJsonLd(rootHtml, 'Homepage');
 assert(rootHtml.includes(`hreflang="en" href="${canonicalHomepage}en/"`), 'Homepage English hreflang is missing.');
-assert(rootHtml.includes('type="application/ld+json"'), 'Homepage ProfilePage structured data is missing.');
 assert(rootHtml.includes('id="projects"'), 'Homepage projects target is missing.');
 assert(rootHtml.includes('id="explore"'), 'Homepage published-content directory is missing.');
 assert(rootHtml.includes('/webgl-portfolio/services/aspnet-core-development/'), 'Homepage does not expose service deep links.');
@@ -118,16 +201,13 @@ for (const route of manifest.routes) {
   titles.set(title, route.path);
   descriptions.set(description, route.path);
   assert(count(html, /<h1[\s>]/gi) === 1, `${route.path}: expected exactly one H1.`);
-  assert(count(html, new RegExp(`<link\\s+rel=["']canonical["'][^>]+href=["']${escapeRegex(canonical)}["']`, 'gi')) === 1, `${route.path}: canonical mismatch.`);
+  validateCanonical(html, canonical, route.path);
+  validateJsonLd(html, route.path);
   assert(html.includes(`hreflang="${locale}" href="${canonical}"`), `${route.path}: self hreflang is missing.`);
   assert(html.includes(`hreflang="${otherLocale}" href="${counterpart}"`), `${route.path}: counterpart hreflang is missing.`);
   assert(html.includes('hreflang="x-default"'), `${route.path}: x-default is missing.`);
-  assert(html.includes('type="application/ld+json"'), `${route.path}: structured data is missing.`);
   assert(!html.includes('/src/main.ts'), `${route.path}: source entry leaked into static HTML.`);
-  if (route.type !== 'home' || route.locale === 'en') {
-    assert(!html.includes('three.'), `${route.path}: content page unexpectedly references Three.js.`);
-    assert(!html.includes('type="module"'), `${route.path}: content page unexpectedly loads a module.`);
-  }
+  if (route.type !== 'home' || route.locale === 'en') validateStaticRuntime(html, route.path);
   assert(sitemap.includes(`<loc>${canonical}</loc>`), `${route.path}: missing from sitemap.`);
 
   const registryEntry = registry.links.find((item) => item.canonicalUrl === canonical);
@@ -136,7 +216,6 @@ for (const route of manifest.routes) {
 }
 
 for (const route of manifest.routes) {
-  const html = htmlByPath.get(route.path);
   const counterpartHtml = htmlByPath.get(route.counterpartPath);
   const canonical = `${manifest.origin}${route.path}`;
   assert(counterpartHtml.includes(`hreflang="${route.locale}" href="${canonical}"`), `${route.path}: counterpart hreflang is not reciprocal.`);
@@ -159,6 +238,7 @@ for (const [sourcePath, html] of htmlFileIndex) {
       continue;
     }
     if (href.startsWith('mailto:') || href.startsWith('tel:')) continue;
+    assert(!href.toLowerCase().startsWith('javascript:'), `${sourcePath}: javascript: URL is forbidden.`);
     const target = new URL(href, `${manifest.origin}${sourcePath}`);
     if (target.origin !== manifest.origin) continue;
     assert(target.pathname.startsWith(manifest.basePath), `${sourcePath}: internal link escapes the project base path: ${href}.`);
@@ -171,6 +251,7 @@ for (const [sourcePath, html] of htmlFileIndex) {
   }
 }
 
+validateStaticRuntime(notFound, '404.html', { requireEventHook: false });
 assert(robots.includes(`Sitemap: ${canonicalHomepage}sitemap.xml`), 'robots.txt does not point to the canonical sitemap.');
 assert(robots.includes('User-agent: OAI-SearchBot'), 'OAI-SearchBot policy is missing.');
 assert(robots.includes('User-agent: PerplexityBot'), 'PerplexityBot policy is missing.');
@@ -179,4 +260,10 @@ assert(notFound.includes('href="/webgl-portfolio/"'), '404 page does not link to
 assert(!registryText.includes('utm_'), 'Portfolio registry must not contain tracking parameters.');
 assert(!registryText.includes('bit.ly') && !registryText.includes('t.co'), 'Portfolio registry must not contain URL shorteners.');
 
-console.log(`Validated ${manifest.routes.length} localized routes, ${htmlFiles.length} HTML files, all internal links and the public portfolio link registry.`);
+const artifactFiles = await listArtifactFiles(dist);
+for (const file of artifactFiles) {
+  if (!textExtensions.has(extname(file).toLowerCase())) continue;
+  assert(!(await readFile(file, 'utf8')).includes('\r'), `${relative(dist, file).replaceAll('\\', '/')}: text artifact contains non-LF line endings.`);
+}
+
+console.log(`Validated ${manifest.routes.length} localized routes, ${htmlFiles.length} HTML files, ${artifactFiles.length} LF artifacts, canonical uniqueness, parseable JSON-LD, bounded static runtime, all internal links and the public portfolio link registry.`);

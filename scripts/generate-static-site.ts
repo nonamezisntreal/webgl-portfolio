@@ -7,7 +7,14 @@ const dist = resolve(process.cwd(), 'dist');
 const origin = (process.env.SITE_ORIGIN ?? siteConfig.origin).replace(/\/$/, '');
 const basePath = normalizeBasePath(process.env.BASE_PATH ?? siteConfig.basePath);
 const locales: Locale[] = ['ru', 'en'];
-const generatedAt = new Date().toISOString();
+const contentUpdatedAt = siteConfig.contentUpdatedAt;
+
+if (!/^\d{4}-\d{2}-\d{2}$/.test(contentUpdatedAt)) {
+  throw new Error(`Invalid versioned content date: ${contentUpdatedAt}`);
+}
+
+const generatedAt = `${contentUpdatedAt}T00:00:00.000Z`;
+const copyrightYear = contentUpdatedAt.slice(0, 4);
 
 interface RouteRecord {
   locale: Locale;
@@ -75,8 +82,10 @@ function commonCss(): string {
   `;
 }
 
+const analyticsBody = "document.addEventListener('click',function(e){var a=e.target.closest('[data-portfolio-event]');if(!a)return;window.dispatchEvent(new CustomEvent('portfolio:event',{detail:{event:a.dataset.portfolioEvent,pageType:document.body.dataset.pageType,pageId:document.body.dataset.pageId,locale:document.documentElement.lang,href:a.href||null}}));});";
+
 function analyticsScript(): string {
-  return `<script>document.addEventListener('click',function(e){var a=e.target.closest('[data-portfolio-event]');if(!a)return;window.dispatchEvent(new CustomEvent('portfolio:event',{detail:{event:a.dataset.portfolioEvent,pageType:document.body.dataset.pageType,pageId:document.body.dataset.pageId,locale:document.documentElement.lang,href:a.href||null}}));});</script>`;
+  return `<script data-portfolio-runtime="events">${analyticsBody}</script>`;
 }
 
 function header(locale: Locale): string {
@@ -86,7 +95,7 @@ function header(locale: Locale): string {
 }
 
 function footer(locale: Locale): string {
-  return `<footer><div class="shell footer-row"><span>© ${new Date().getUTCFullYear()} ${siteConfig.publicName}</span><span><a href="${siteConfig.telegramUrl}" rel="me noopener" data-portfolio-event="cta_telegram">Telegram</a> · <a href="mailto:${siteConfig.email}" data-portfolio-event="cta_email">Email</a> · <a href="${siteConfig.githubUrl}" rel="me noopener" data-portfolio-event="cta_github">GitHub</a></span></div></footer>`;
+  return `<footer><div class="shell footer-row"><span>© ${copyrightYear} ${siteConfig.publicName}</span><span><a href="${siteConfig.telegramUrl}" rel="me noopener" data-portfolio-event="cta_telegram">Telegram</a> · <a href="mailto:${siteConfig.email}" data-portfolio-event="cta_email">Email</a> · <a href="${siteConfig.githubUrl}" rel="me noopener" data-portfolio-event="cta_github">GitHub</a></span></div></footer>`;
 }
 
 function head(locale: Locale, title: string, description: string, path: string, counterpartPath: string, jsonLd: unknown[]): string {
@@ -200,7 +209,7 @@ const routes: RouteRecord[] = [];
 
 for (const locale of locales) {
   const homePath = routePath(locale);
-  routes.push({ locale, type: 'home', id: 'home', path: homePath, counterpartPath: routePath(locale === 'ru' ? 'en' : 'ru'), updatedAt: '2026-07-30', capabilities: [] });
+  routes.push({ locale, type: 'home', id: 'home', path: homePath, counterpartPath: routePath(locale === 'ru' ? 'en' : 'ru'), updatedAt: contentUpdatedAt, capabilities: [] });
   if (locale === 'en') await writePage(homePath, homeDocument(locale));
 
   for (const descriptor of servicePages) {
@@ -213,7 +222,7 @@ for (const locale of locales) {
     const serviceLd = { '@context': 'https://schema.org', '@type': 'Service', name: content.title, description: content.description, provider: { '@type': 'Person', name: siteConfig.publicName, url: siteConfig.portfolioUrl }, url: absolute(path) };
     const faqLd = content.faq?.length ? { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: content.faq.map((item) => ({ '@type': 'Question', name: item.question, acceptedAnswer: { '@type': 'Answer', text: item.answer } })) } : null;
     await writePage(path, documentTemplate({ locale, type: 'service', id: descriptor.id, path, counterpartPath, title: content.title, description: content.description, directAnswer: content.directAnswer, body, jsonLd: faqLd ? [serviceLd, faqLd] : [serviceLd] }));
-    routes.push({ locale, type: 'service', id: descriptor.id, path, counterpartPath, updatedAt: '2026-07-30', capabilities: descriptor.capabilities });
+    routes.push({ locale, type: 'service', id: descriptor.id, path, counterpartPath, updatedAt: contentUpdatedAt, capabilities: descriptor.capabilities });
   }
 
   for (const descriptor of casePages) {

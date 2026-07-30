@@ -1,35 +1,53 @@
 import { readFile, readdir } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 
-const dist = resolve(process.cwd(), 'dist');
+const projectRoot = resolve(process.env.PROJECT_ROOT ?? process.cwd());
+const dist = resolve(projectRoot, process.env.DIST_DIR ?? 'dist');
 
-async function listHtmlFiles(directory) {
+async function listFiles(directory, predicate) {
   const files = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = resolve(directory, entry.name);
-    if (entry.isDirectory()) files.push(...await listHtmlFiles(path));
-    else if (entry.name.endsWith('.html')) files.push(path);
+    if (entry.isDirectory()) files.push(...await listFiles(path, predicate));
+    else if (entry.isFile() && predicate(path)) files.push(path);
   }
   return files;
 }
 
 const forbiddenClaims = [
-  { pattern: /\b60\s*fps\b/i, label: 'absolute 60fps claim' },
-  { pattern: /stable\s+60/i, label: 'stable 60 claim' },
-  { pattern: /steady\s+60/i, label: 'steady 60 claim' },
-  { pattern: /gh-pages branch/i, label: 'obsolete gh-pages deployment claim' },
-  { pattern: /без перезагрузки страницы/i, label: 'obsolete in-place localization claim' },
-  { pattern: /without a page reload/i, label: 'obsolete in-place localization claim' },
+  { pattern: /\b\d+(?:\.\d+)?\s*(?:fps|frames?\s+per\s+second)\b/iu, label: 'absolute numeric frame-rate claim' },
+  { pattern: /\b(?:stable|steady|constant|locked|guaranteed)\s+(?:at\s+)?\d+(?:\.\d+)?(?:\s*(?:fps|frames?\s+per\s+second))?\b/iu, label: 'guaranteed frame-rate claim' },
+  { pattern: /\b\d+(?:[.,]\d+)?\s*(?:кадр(?:а|ов)?\s+в\s+секунду)\b/iu, label: 'absolute Russian frame-rate claim' },
+  { pattern: /\b(?:стабильн\w*|гарантированн\w*|постоянн\w*)\s+\d+(?:[.,]\d+)?(?:\s*(?:fps|кадр\w*))?\b/iu, label: 'guaranteed Russian frame-rate claim' },
+  { pattern: /gh-pages branch/iu, label: 'obsolete gh-pages deployment claim' },
+  { pattern: /без перезагрузки страницы/iu, label: 'obsolete in-place localization claim' },
+  { pattern: /without a page reload/iu, label: 'obsolete in-place localization claim' },
 ];
 
-const htmlFiles = await listHtmlFiles(dist);
+function collectViolations(source, label) {
+  const violations = [];
+  for (const claim of forbiddenClaims) {
+    if (claim.pattern.test(source)) violations.push(`${label}: ${claim.label}`);
+  }
+  return violations;
+}
+
+const sourceFiles = [
+  resolve(projectRoot, 'index.html'),
+  ...await listFiles(resolve(projectRoot, 'src'), (path) => /\.(?:ts|tsx|js|jsx|html)$/i.test(path)),
+];
+const htmlFiles = await listFiles(dist, (path) => path.endsWith('.html'));
+const javascriptFiles = await listFiles(dist, (path) => path.endsWith('.js'));
 const violations = [];
 
+for (const file of sourceFiles) {
+  violations.push(...collectViolations(await readFile(file, 'utf8'), `source:${relative(projectRoot, file).replaceAll('\\', '/')}`));
+}
 for (const file of htmlFiles) {
-  const html = await readFile(file, 'utf8');
-  for (const claim of forbiddenClaims) {
-    if (claim.pattern.test(html)) violations.push(`${file}: ${claim.label}`);
-  }
+  violations.push(...collectViolations(await readFile(file, 'utf8'), `html:${relative(dist, file).replaceAll('\\', '/')}`));
+}
+for (const file of javascriptFiles) {
+  violations.push(...collectViolations(await readFile(file, 'utf8'), `javascript:${relative(dist, file).replaceAll('\\', '/')}`));
 }
 
 if (violations.length) {
@@ -80,4 +98,4 @@ for (const claim of expectedClaims) {
   }
 }
 
-console.log(`Validated public claims across ${htmlFiles.length} HTML files.`);
+console.log(`Validated public claims across ${sourceFiles.length} source files, ${htmlFiles.length} HTML files and ${javascriptFiles.length} JavaScript bundles.`);

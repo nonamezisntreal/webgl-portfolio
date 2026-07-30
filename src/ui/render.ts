@@ -1,5 +1,6 @@
 import { getCopy, getProjects, profile, skills, stack, type Locale, type Project } from '../content';
 import { publicClaims } from '../public-claims';
+import { siteConfig } from '../static-pages';
 
 /** Inject all dynamic content (stack chips, project cards, skills, links) into the DOM. */
 export function renderContent(locale: Locale): void {
@@ -11,7 +12,7 @@ export function renderContent(locale: Locale): void {
   renderSkills(locale);
   renderContactLinks(locale);
   const year = document.getElementById('year');
-  if (year) year.textContent = String(new Date().getFullYear());
+  if (year) year.textContent = siteConfig.contentUpdatedAt.slice(0, 4);
 }
 
 function renderStack(): void {

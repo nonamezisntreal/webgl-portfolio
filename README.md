@@ -51,12 +51,13 @@ bun run build
 `bun run build` performs:
 
 ```text
-TypeScript check
+workflow policy validation
+→ TypeScript check
 → content registry validation
 → Vite asset build
 → localized static page generation
 → homepage performance hardening
-→ localized navigation and fallback finalization
+→ localized navigation finalization
 → deterministic metadata and mtime normalization
 → complete dist and public-claim validation
 ```
@@ -69,9 +70,11 @@ There is no second project registry.
 - `src/static-pages.ts` contains only static routes, extended service/insight content, capability tags and relationships.
 - `src/public-claims.ts` contains verified public performance, localization and deployment wording used by the canonical content source.
 - `scripts/validate-content.ts` binds the content sources and fails on duplicate IDs, broken relationships, missing localization or public-profile drift.
-- `scripts/finalize-static-site.ts` repairs only bounded legacy homepage fallbacks and GitHub Pages navigation compatibility.
-- `scripts/normalize-artifact.mjs` derives `generatedAt` from versioned content dates and normalizes all `dist` mtimes.
-- `scripts/validate-public-claims.mjs` independently rejects obsolete deployment/localization wording and absolute frame-rate promises.
+- `scripts/finalize-static-site.ts` repairs only bounded GitHub Pages navigation compatibility on generated Russian content pages.
+- `scripts/normalize-artifact.mjs` derives `generatedAt` from versioned content dates, canonicalizes text artifacts to LF and normalizes all `dist` mtimes.
+- `scripts/validate-public-claims.mjs` rejects obsolete wording and numeric frame-rate promises in canonical source, generated HTML and JavaScript bundles.
+- `scripts/validate-dist.mjs` requires one canonical per page, parseable JSON-LD and a bounded non-WebGL runtime contract for static pages.
+- `scripts/validate-workflow-policy.mjs` enforces immutable Actions, Bun `1.3.14`, exact PR-head checkout, least privilege and positive deployment guards.
 
 Changing the exact canonical portfolio URL requires an explicit migration because FreelanceBot uses:
 
@@ -105,9 +108,10 @@ The content pages do not load Three.js or client-side routing. Every public URL 
 
 The canonical deployment pipeline is `.github/workflows/deploy.yml`.
 
-- Pull requests run a frozen Bun install and the full production build/validation pipeline.
+- Pull requests use pinned Bun `1.3.14`, exact PR-head checkout and the full production build/validation pipeline.
 - Pull requests upload the exact normalized `dist/` candidate for manual artifact review.
-- Pushes to `main` build and publish the `dist/` artifact through GitHub Pages Actions.
+- Full-SHA Actions and explicit job permissions are validated before the site build.
+- Only `push` or `workflow_dispatch` on `refs/heads/main` can configure, upload or deploy GitHub Pages.
 - `BASE_PATH` is set to `/${repository-name}/`, preserving the project-site URL.
 - The historical `gh-pages` branch is not a second source of truth and must not be updated in parallel.
 
