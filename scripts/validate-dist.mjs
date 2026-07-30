@@ -45,13 +45,13 @@ function attributes(source, tag, attribute) {
 }
 
 function ids(source) {
-  return new Set([...source.matchAll(/\\bid=["']([^"']+)["']/gi)].map((match) => match[1]));
+  return new Set([...source.matchAll(/\bid=["']([^"']+)["']/gi)].map((match) => match[1]));
 }
 
 function htmlPath(file, basePath) {
   const rel = relative(dist, file).replaceAll('\\', '/');
   if (rel === 'index.html') return basePath;
-  return `${basePath}${rel.replace(/index\\.html$/, '')}`;
+  return `${basePath}${rel.replace(/index\.html$/, '')}`;
 }
 
 for (const file of requiredFiles) await access(resolve(dist, file), constants.R_OK);
@@ -108,8 +108,8 @@ for (const route of manifest.routes) {
   const counterpart = `${manifest.origin}${route.counterpartPath}`;
   const locale = route.locale;
   const otherLocale = locale === 'ru' ? 'en' : 'ru';
-  const title = html.match(/<title>([^<]+)<\\/title>/i)?.[1];
-  const description = html.match(/<meta\\s+name=["']description["'][^>]+content=["']([^"']+)["']/i)?.[1];
+  const title = html.match(/<title>([^<]+)<\/title>/i)?.[1];
+  const description = html.match(/<meta\s+name=["']description["'][^>]+content=["']([^"']+)["']/i)?.[1];
 
   assert(title, `${route.path}: missing title.`);
   assert(description, `${route.path}: missing description.`);
@@ -117,7 +117,7 @@ for (const route of manifest.routes) {
   assert(!descriptions.has(description), `${route.path}: duplicate description also used by ${descriptions.get(description)}.`);
   titles.set(title, route.path);
   descriptions.set(description, route.path);
-  assert(count(html, /<h1[\\s>]/gi) === 1, `${route.path}: expected exactly one H1.`);
+  assert(count(html, /<h1[\s>]/gi) === 1, `${route.path}: expected exactly one H1.`);
   assert(count(html, new RegExp(`<link\\s+rel=["']canonical["'][^>]+href=["']${escapeRegex(canonical)}["']`, 'gi')) === 1, `${route.path}: canonical mismatch.`);
   assert(html.includes(`hreflang="${locale}" href="${canonical}"`), `${route.path}: self hreflang is missing.`);
   assert(html.includes(`hreflang="${otherLocale}" href="${counterpart}"`), `${route.path}: counterpart hreflang is missing.`);
