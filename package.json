@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit",
-    "build": "bun run typecheck && vite build && bun run validate:dist",
+    "generate:static": "bun scripts/generate-static-site.ts",
+    "build": "bun run typecheck && vite build && bun run generate:static && bun run validate:dist",
     "validate:dist": "node scripts/validate-dist.mjs",
     "preview": "vite preview"
   },
