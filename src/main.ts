@@ -1,5 +1,6 @@
 import './styles/main.css';
 import { getCopy, type Locale } from './content';
+import { publicClaims } from './public-claims';
 import { renderContent } from './ui/render';
 import { initScroll } from './ui/scroll';
 import { initReveals } from './ui/reveal';
@@ -55,7 +56,7 @@ function applyLocale(currentLocale: Locale): void {
   setText('about-body', t.about.body);
   setText('about-quote', t.about.quote);
   setText('about-card-performance-title', t.about.cards.performance.title);
-  setText('about-card-performance-text', t.about.cards.performance.text);
+  setText('about-card-performance-text', publicClaims.performanceCard[currentLocale]);
   setText('about-card-creativity-title', t.about.cards.creativity.title);
   setText('about-card-creativity-text', t.about.cards.creativity.text);
   setText('about-card-architecture-title', t.about.cards.architecture.title);
