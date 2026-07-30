@@ -1,60 +1,97 @@
 # ◆ WebGL Portfolio — Interactive Developer Experience
 
-A premium, dark, interactive WebGL portfolio landing page.
-Not just a page — an **experience**: a living energy core that reacts to your mouse and scroll, wrapped in a cyber-minimal UI.
+A dark interactive WebGL homepage plus statically generated service, case-study and technical insight pages.
 
-**Stack:** Three.js · TypeScript · Vite · Lenis · custom GLSL
+**Stack:** Three.js · TypeScript · Vite · Bun · custom GLSL · GitHub Pages
 
 **Public site:** https://nonamezisntreal.github.io/webgl-portfolio/
 
-## ✦ Features
+## ✦ What the build produces
 
-- **Living WebGL scene** — noise-displaced energy orb with fresnel glow, orbital rings, crystal shards, 1.6k ambient particles and comet light-trails
-- **Custom GLSL** — simplex-noise vertex displacement, fresnel shading, additive halo, point sprites
-- **Cinematic post-processing** — Unreal bloom → subtle chromatic aberration → vignette → animated film grain
-- **Scroll-driven** — Lenis smooth scroll; page progress morphs the orb, shifts its hue cyan→violet and dollies the camera; each section re-frames the scene
-- **Micro-interactions everywhere** — magnetic glow cards, 3D tilt, custom cursor with lagging ring, shimmer sweeps, staggered reveals
-- **Expandable case studies** — click any project card for a cinematic overlay panel
-- **Performance-first** — lazy-loaded Three.js chunk, DPR caps, mobile particle budget, render loop pauses on hidden tabs, `prefers-reduced-motion` fallback renders a static frame
-- **Decoupled architecture** — the UI layer talks to WebGL only via `setScroll()` / `setSection()`
+- interactive Russian homepage at `/webgl-portfolio/`;
+- static English homepage at `/webgl-portfolio/en/`;
+- five service pages in RU and EN;
+- four case-study pages in RU and EN;
+- four technical insight pages in RU and EN;
+- reciprocal `hreflang`, canonical URLs and JSON-LD;
+- generated `sitemap.xml` and `robots.txt`;
+- public `portfolio-links.json` for verified deep-link selection by FreelanceBot;
+- static `404.html`;
+- fail-closed source and artifact validation.
+
+The current route count is **28 localized canonical pages** plus the 404 document.
+
+## ✦ Homepage features
+
+- living WebGL scene with custom shaders, particles and post-processing;
+- lazy-loaded Three.js render layer;
+- scroll-driven scene changes and micro-interactions;
+- mobile DPR and particle budgets;
+- render loop pause on hidden tabs;
+- `prefers-reduced-motion` fallback;
+- non-blocking loader that does not cover primary content;
+- DOM content remains usable when WebGL fails.
 
 ## ▲ Run locally
 
 ```bash
 bun install --frozen-lockfile
 bun run dev
+```
+
+Production verification:
+
+```bash
+BASE_PATH=/webgl-portfolio/ \
+SITE_ORIGIN=https://nonamezisntreal.github.io \
 bun run build
 ```
 
-`bun run build` runs TypeScript validation, creates the Vite production artifact and verifies the GitHub Pages SEO/deployment invariants in `dist/`.
+`bun run build` performs:
 
-## ⌬ Personalize
+```text
+TypeScript check
+→ content registry validation
+→ Vite asset build
+→ localized static page generation
+→ homepage performance hardening
+→ complete dist validation
+```
 
-All copy lives in **`src/content.ts`** — name, role, email, social links, stack, projects (with case studies) and skills. Edit that one file and the site is yours. Page title/description and canonical social metadata are in `index.html`.
+## ⌬ Content sources
+
+There is no second project registry.
+
+- `src/content.ts` remains canonical for profile data, homepage copy, project summaries and project case-study data.
+- `src/static-pages.ts` contains only static routes, extended service/insight content, capability tags and relationships.
+- `scripts/validate-content.ts` binds both sources and fails on duplicate IDs, broken relationships, missing localization or public-profile drift.
+
+Changing the exact canonical portfolio URL requires an explicit migration because FreelanceBot uses:
+
+```text
+https://nonamezisntreal.github.io/webgl-portfolio/
+```
 
 ## ▣ Architecture
 
+```text
+src/content.ts
+src/static-pages.ts
+        │
+        ├── homepage runtime (Vite + Three.js)
+        └── scripts/generate-static-site.ts
+                    │
+                    ├── /en/
+                    ├── /services/*
+                    ├── /cases/*
+                    ├── /insights/*
+                    ├── sitemap.xml
+                    ├── robots.txt
+                    ├── portfolio-links.json
+                    └── routes-manifest.json
 ```
-src/
-├── main.ts              # bootstrap: content → UI → lazy WebGL
-├── content.ts           # ← all editable content
-├── styles/main.css      # design system (CSS custom properties)
-├── webgl/               # render layer (no DOM knowledge)
-│   ├── Experience.ts    # renderer, camera, loop, inputs
-│   ├── Core.ts          # energy orb + halo (custom shaders)
-│   ├── Particles.ts     # ambient particles + comet trails
-│   ├── Rings.ts         # orbital rings + floating shards
-│   ├── PostFX.ts        # bloom + grade pass
-│   └── shaders.ts       # GLSL sources
-└── ui/                  # DOM layer (no Three.js knowledge)
-    ├── scroll.ts        # Lenis + progress + section tracking
-    ├── reveal.ts        # IntersectionObserver reveals
-    ├── tilt.ts          # 3D tilt + cursor glow
-    ├── cursor.ts        # custom cursor
-    ├── projects.ts      # case-study overlay
-    ├── contact.ts       # mailto contact form
-    └── render.ts        # injects content.ts into the DOM
-```
+
+The content pages do not load Three.js or client-side routing. Every public URL has a physical `index.html`, so direct navigation and reload work on GitHub Pages.
 
 ## ⚡ Deploy
 
@@ -63,18 +100,28 @@ The canonical deployment pipeline is `.github/workflows/deploy.yml`.
 - Pull requests run a frozen Bun install and the full production build/validation pipeline.
 - Pushes to `main` build and publish the `dist/` artifact through GitHub Pages Actions.
 - `BASE_PATH` is set to `/${repository-name}/`, preserving the project-site URL.
-- The historical `gh-pages` branch is not a second source of truth and should not be updated in parallel.
+- The historical `gh-pages` branch is not a second source of truth and must not be updated in parallel.
 
-Repository setting required after owner approval:
+Repository setting required before the first production deployment through Actions:
 
 ```text
 Settings → Pages → Build and deployment → Source: GitHub Actions
 ```
 
-Manual verification build:
+The workflow does not mutate Pages settings automatically.
 
-```bash
-BASE_PATH=/webgl-portfolio/ bun run build
-```
+## Verification guarantees
 
-The workflow does not change GitHub Pages settings automatically.
+The build fails when any of the following occurs:
+
+- duplicate route or content IDs;
+- broken service/case relationships;
+- missing RU/EN content;
+- canonical portfolio URL drift;
+- profile contact drift between runtime and static output;
+- missing generated route;
+- incorrect canonical or `hreflang`;
+- missing title, description, H1 or structured data;
+- Three.js/module loading on static content pages;
+- URL shorteners or tracking parameters in `portfolio-links.json`;
+- stale crawler or sitemap output.
