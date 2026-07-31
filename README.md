@@ -138,7 +138,7 @@ The build fails when any of the following occurs:
 - Three.js/module loading on static content pages;
 - broken internal URLs or fragments;
 - URL shorteners or tracking parameters in `portfolio-links.json`;
-- absolute `60fps`/stable-frame-rate promises;
-- obsolete in-place localization or `gh-pages branch` claims;
+- unsupported fixed or guaranteed frame-rate promises;
+- obsolete in-place localization or branch-based deployment claims;
 - non-versioned artifact timestamps;
 - stale crawler or sitemap output.

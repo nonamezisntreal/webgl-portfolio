@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { copy, profile, type Locale } from '../src/content';
 import { casePages, insightPages, servicePages, siteConfig } from '../src/static-pages';
 
@@ -17,6 +18,9 @@ assert(siteConfig.portfolioUrl === 'https://nonamezisntreal.github.io/webgl-port
 assert(siteConfig.githubUrl === profile.github, 'Static and runtime GitHub URLs diverged.');
 assert(siteConfig.telegramUrl === profile.telegram, 'Static and runtime Telegram URLs diverged.');
 assert(siteConfig.email === profile.email, 'Static and runtime email addresses diverged.');
+const renderSource = await readFile(new URL('../src/ui/render.ts', import.meta.url), 'utf8');
+assert(renderSource.includes("year.textContent = siteConfig.contentUpdatedAt.slice(0, 4);"), 'Homepage copyright year must be derived from siteConfig.contentUpdatedAt.');
+assert(!/new\s+Date\s*\(|Date\.now\s*\(/.test(renderSource), 'Homepage copyright rendering must not depend on the wall clock.');
 
 assertUnique(servicePages.map((item) => item.id), 'Service IDs');
 assertUnique(servicePages.map((item) => item.slug), 'Service slugs');
