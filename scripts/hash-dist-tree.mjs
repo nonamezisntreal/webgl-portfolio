@@ -37,4 +37,4 @@ const serialized = `${JSON.stringify(manifest, null, 2)}\n`;
 if (output) await writeFile(output, serialized, 'utf8');
 else process.stdout.write(serialized);
 
-if (records.length !== 38) throw new Error(`Expected 38 dist files, found ${records.length}.`);
+if (records.length !== 37) throw new Error(`Expected 37 dist files, found ${records.length}.`);

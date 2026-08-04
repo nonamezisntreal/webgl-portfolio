@@ -260,7 +260,7 @@ export const copy = {
           challenge:
             'Сделать не просто лендинг, а атмосферный experience: WebGL должен быть заметным, но не мешать чтению и контактам.',
           solution:
-            'UI и WebGL разделены по слоям: Three.js грузится лениво, сцена реагирует на мышь/скролл, bloom приглушается на контентных секциях, а текст и проекты вынесены в один конфиг.',
+            'UI и WebGL разделены по слоям: Three.js изолирован от рендеринга контента, сцена реагирует на мышь/скролл, bloom приглушается на контентных секциях, а текст и проекты вынесены в один конфиг.',
           highlights: [
             'Шейдерное энергетическое ядро, частицы, орбиты и light trails',
             publicClaims.localizationArchitecture.ru,
@@ -471,7 +471,7 @@ export const copy = {
           challenge:
             'Build more than a landing page: a cinematic experience where WebGL feels central without hurting readability or contact conversion.',
           solution:
-            'Separated UI and WebGL layers: Three.js lazy-loads, the scene reacts to pointer and scroll, bloom calms down in content sections and copy/projects live in one editable config.',
+            'Separated UI and WebGL layers: Three.js stays isolated from content rendering, the scene reacts to pointer and scroll, bloom calms down in content sections and copy/projects live in one editable config.',
           highlights: [
             'Shader-driven energy core, particles, orbit rings and light trails',
             publicClaims.localizationArchitecture.en,

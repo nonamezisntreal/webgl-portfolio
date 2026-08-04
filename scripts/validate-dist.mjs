@@ -670,7 +670,7 @@ assert(!registryText.toLowerCase().includes('utm_'), 'Portfolio registry must no
 assert(!registryText.includes('bit.ly') && !registryText.includes('t.co'), 'Portfolio registry must not contain URL shorteners.');
 
 const artifactFiles = await listFiles(dist);
-assert(artifactFiles.length === 38, `Expected exactly 38 extracted dist artifacts, found ${artifactFiles.length}.`);
+assert(artifactFiles.length === 37, `Expected exactly 37 extracted dist artifacts, found ${artifactFiles.length}.`);
 const artifactAuthorities = new Map();
 for (const file of artifactFiles) {
   const artifactPath = normalizedRelative(dist, file);

@@ -34,7 +34,7 @@ Runtime dependencies remain bounded and exact:
 - `lenis = 1.3.23`;
 - `@types/three = 0.165.0`.
 
-No Three.js API migration or visual redesign was introduced. The Vite migration is limited to the build toolchain; `vite.config.ts` retains the existing chunk policy and now defaults to the canonical GitHub Pages base path.
+No Three.js API migration or visual redesign was introduced. The Vite migration is limited to the build toolchain; `vite.config.ts` retains the existing chunk policy and now defaults to the canonical GitHub Pages base path. The final reproducibility correction uses a normal static `Experience` import and the standard Vite/esbuild pipeline, producing exactly 37 artifacts; Rollup WASM aliases, Terser, `@rollup/plugin-typescript` and `tslib` are not part of the final graph.
 
 ## Compatibility evidence
 

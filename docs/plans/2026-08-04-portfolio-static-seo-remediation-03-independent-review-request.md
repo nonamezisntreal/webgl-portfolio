@@ -71,7 +71,8 @@ Independently inspect:
 - repeat the full build and validator suite;
 - repeat `94/94` inherited adversarial tests and `21/21` Review-03 tests;
 - inspect the dependency graph and `bun audit --json` result;
-- compare the two Windows and two Ubuntu/WSL dist manifests by normalized path, byte length and SHA-256;
+- require exactly 37 generated artifacts in each of the two Windows and two Ubuntu/WSL builds;
+- compare all four dist manifests by normalized path, byte length and SHA-256, requiring a `37/37` exact match;
 - investigate any difference rather than accepting count-only parity.
 
 ### Evidence corruption resistance

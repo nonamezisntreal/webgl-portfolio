@@ -9,6 +9,7 @@ import { initCursor } from './ui/cursor';
 import { initProjectCases } from './ui/projects';
 import { initContactForm } from './ui/contact';
 import { initInteractions, bindMagnetic } from './ui/interactions';
+import { Experience } from './webgl/Experience';
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const locale: Locale = 'ru';
@@ -100,14 +101,13 @@ initInteractions(reducedMotion);
 initProjectCases(() => locale);
 initContactForm(() => locale);
 
-/* WebGL is lazy-loaded so primary HTML paints immediately. */
+/* Primary HTML is independent of WebGL initialization and remains usable on fallback. */
 const canvas = document.getElementById('gl') as HTMLCanvasElement;
 const fpsLabel = document.getElementById('hero-fps');
 let disposeExperience: (() => void) | undefined;
 
 async function boot(): Promise<void> {
   try {
-    const { Experience } = await import('./webgl/Experience');
     const experience = new Experience({
       canvas,
       reducedMotion,

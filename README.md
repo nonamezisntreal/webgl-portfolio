@@ -25,7 +25,7 @@ The current route count is **28 localized canonical pages** plus the 404 documen
 ## ✦ Homepage features
 
 - living WebGL scene with custom shaders, particles and post-processing;
-- lazy-loaded Three.js render layer;
+- Three.js render layer isolated from primary content rendering;
 - scroll-driven scene changes and micro-interactions;
 - mobile DPR and particle budgets;
 - render loop pause on hidden tabs;
