@@ -12,6 +12,8 @@ const validators = {
   dist: resolve(projectRoot, 'scripts/validate-dist.mjs'),
   claims: resolve(projectRoot, 'scripts/validate-public-claims.mjs'),
   workflow: resolve(projectRoot, 'scripts/validate-workflow-policy.mjs'),
+  architecture: resolve(projectRoot, 'scripts/validate-localized-homepage-architecture.mjs'),
+  hero: resolve(projectRoot, 'scripts/validate-hero-scene.mjs'),
 };
 const canonical = 'https://nonamezisntreal.github.io/webgl-portfolio/en/services/webgl-interfaces/';
 const staticPage = 'en/services/webgl-interfaces/index.html';
@@ -139,6 +141,34 @@ async function withContentSourceMutation(mutate) {
   }
 }
 
+async function withHeroSourceMutation(mutate) {
+  const root = await mkdtemp(resolve(tmpdir(), 'webgl-hero-source-'));
+  try {
+    await cp(resolve(projectRoot, 'src/webgl'), resolve(root, 'src/webgl'), { recursive: true });
+    await mutate(root);
+    return nodeResult(validators.hero, { PROJECT_ROOT: root });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+async function withArchitectureSourceMutation(mutate) {
+  const root = await mkdtemp(resolve(tmpdir(), 'webgl-home-architecture-'));
+  try {
+    await mkdir(resolve(root, 'src'), { recursive: true });
+    await mkdir(resolve(root, 'scripts'), { recursive: true });
+    await cp(resolve(projectRoot, 'index.html'), resolve(root, 'index.html'));
+    await cp(resolve(projectRoot, 'src/main.ts'), resolve(root, 'src/main.ts'));
+    for (const name of ['generate-static-site.ts', 'harden-homepage.ts', 'finalize-static-site.ts']) {
+      await cp(resolve(projectRoot, 'scripts', name), resolve(root, 'scripts', name));
+    }
+    await mutate(root);
+    return nodeResult(validators.architecture, { PROJECT_ROOT: root });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
 async function mutateText(path, mutate) {
   const source = await readFile(path, 'utf8');
   await writeFile(path, mutate(source), 'utf8');
@@ -230,10 +260,34 @@ function contentCase(id, mutation, expectedDiagnostic, mutate) {
   };
 }
 
+function heroCase(id, mutation, expectedDiagnostic, mutate) {
+  return {
+    id,
+    section: 'hero-scene',
+    mutation,
+    expectedDiagnostic,
+    command: commandDisplay(node, [validators.hero]),
+    execute: () => withHeroSourceMutation(mutate),
+  };
+}
+
+function architectureCase(id, mutation, expectedDiagnostic, mutate) {
+  return {
+    id,
+    section: 'interactive-homepage-source-architecture',
+    mutation,
+    expectedDiagnostic,
+    command: commandDisplay(node, [validators.architecture]),
+    execute: () => withArchitectureSourceMutation(mutate),
+  };
+}
+
 const baselineChecks = [
   ['dist', validators.dist],
   ['claims', validators.claims],
   ['workflow', validators.workflow],
+  ['architecture', validators.architecture],
+  ['hero', validators.hero],
 ];
 for (const [name, script] of baselineChecks) {
   const result = nodeResult(script);
@@ -587,6 +641,64 @@ const cases = [
   distCase('ADV-094', 'reproducibility', 'portfolio registry serialization order drift', 'portfolio-links.json top-level key order is unstable', async (root) => {
     const file = resolve(root, 'portfolio-links.json'); const value = JSON.parse(await readFile(file, 'utf8')); const reordered = { generatedAt: value.generatedAt, links: value.links, schemaVersion: value.schemaVersion, canonicalHomepageUrl: value.canonicalHomepageUrl }; await writeJson(file, reordered);
   }),
+
+  distCase('ADV-095', 'interactive-homepages', 'English homepage application module removed', 'expected exactly one application module script', async (root) => {
+    await mutateText(resolve(root, 'en/index.html'), (html) => replaceRequired(html, /<script\b[^>]*type="module"[^>]*><\/script>/i, '', 'English application module'));
+  }),
+  distCase('ADV-096', 'interactive-homepages', 'English homepage canvas removed', 'expected exactly one shared WebGL canvas', async (root) => {
+    await mutateText(resolve(root, 'en/index.html'), (html) => replaceRequired(html, /<canvas\b[^>]*id="gl"[^>]*><\/canvas>/i, '', 'English WebGL canvas'));
+  }),
+  distCase('ADV-097', 'interactive-homepages', 'English declared locale changed to Russian', 'data-locale must equal en', async (root) => {
+    await mutateText(resolve(root, 'en/index.html'), (html) => replaceRequired(html, '<html lang="en" data-locale="en">', '<html lang="en" data-locale="ru">', 'English data-locale'));
+  }),
+  distCase('ADV-098', 'interactive-homepages', 'active English locale changed back into an anchor', 'active locale must be an inert span', async (root) => {
+    await mutateText(resolve(root, 'en/index.html'), (html) => replaceRequired(html, /<span class="lang-toggle__option is-active" data-lang-pill="en" aria-current="page">EN<\/span>/i, '<a class="lang-toggle__option is-active" data-lang-pill="en" href="/webgl-portfolio/en/" aria-current="page">EN</a>', 'active EN option'));
+  }),
+  distCase('ADV-099', 'interactive-homepages', 'inactive RU locale points to the wrong homepage', 'inactive locale href must equal /webgl-portfolio/', async (root) => {
+    await mutateText(resolve(root, 'en/index.html'), (html) => replaceRequired(html, 'href="/webgl-portfolio/" hreflang="ru"', 'href="/webgl-portfolio/en/" hreflang="ru"', 'inactive RU href'));
+  }),
+  distCase('ADV-100', 'interactive-homepages', 'English homepage hardening removed', 'homepage hardening marker must appear exactly once', async (root) => {
+    await mutateText(resolve(root, 'en/index.html'), (html) => replaceRequired(html, ' data-homepage-hardening="v1"', '', 'English hardening marker'));
+  }),
+  distCase('ADV-101', 'interactive-homepages', 'English homepage hardening duplicated', 'homepage hardening marker must appear exactly once', async (root) => {
+    await mutateText(resolve(root, 'en/index.html'), (html) => replaceRequired(html, 'data-homepage-hardening="v1"', 'data-homepage-hardening="v1" data-homepage-hardening="v1"', 'duplicate English hardening marker'));
+  }),
+  distCase('ADV-102', 'interactive-homepages', 'English localized published-content directory removed', 'localized published-content directory is missing', async (root) => {
+    await mutateText(resolve(root, 'en/index.html'), (html) => replaceRequired(html, 'id="explore"', 'id="explore-removed"', 'English SEO directory'));
+  }),
+  distCase('ADV-103', 'interactive-homepages', 'English homepage replaced by a non-interactive document marker', 'interactive homepage marker is missing', async (root) => {
+    await mutateText(resolve(root, 'en/index.html'), (html) => replaceRequired(html, 'data-interactive-homepage="v1"', 'data-static-homepage="v1"', 'English interactive marker'));
+  }),
+  distCase('ADV-104', 'interactive-homepages', 'English canonical points to Russian homepage', 'canonical mismatch', async (root) => {
+    await mutateText(resolve(root, 'en/index.html'), (html) => replaceRequired(html, '<link rel="canonical" href="https://nonamezisntreal.github.io/webgl-portfolio/en/"', '<link rel="canonical" href="https://nonamezisntreal.github.io/webgl-portfolio/"', 'English canonical'));
+  }),
+  distCase('ADV-105', 'interactive-homepages', 'English self hreflang points to Russian homepage', 'self hreflang is missing', async (root) => {
+    await mutateText(resolve(root, 'en/index.html'), (html) => replaceRequired(html, 'hreflang="en" href="https://nonamezisntreal.github.io/webgl-portfolio/en/"', 'hreflang="en" href="https://nonamezisntreal.github.io/webgl-portfolio/"', 'English self hreflang'));
+  }),
+  distCase('ADV-106', 'interactive-homepages', 'English nested navigation restored obsolete #cases fragment', 'broken target fragment', async (root) => {
+    await mutateText(resolve(root, staticPage), (html) => replaceRequired(html, '/webgl-portfolio/en/#projects', '/webgl-portfolio/en/#cases', 'English nested cases navigation'));
+  }),
+  heroCase('ADV-107', 'spherical comet geometry reintroduced into Particles', 'intrusive spherical-comet contract: SphereGeometry', async (root) => {
+    await mutateText(resolve(root, 'src/webgl/Particles.ts'), (source) => `${source}\nconst regression = new THREE.SphereGeometry(0.025, 8, 8);\n`);
+  }),
+  heroCase('ADV-108', 'primary bloom pass removed from hero composition', 'Primary bloom composition is missing', async (root) => {
+    await mutateText(resolve(root, 'src/webgl/PostFX.ts'), (source) => replaceRequired(source, 'this.composer.addPass(this.bloom);', '// bloom removed', 'bloom pass'));
+  }),
+  heroCase('ADV-109', 'ambient shader particle field removed', 'Ambient shader particle field is missing', async (root) => {
+    await mutateText(resolve(root, 'src/webgl/Particles.ts'), (source) => replaceRequired(source, 'new THREE.Points(geometry, this.material)', 'new THREE.Group()', 'ambient particle field'));
+  }),
+  distCase('ADV-110', 'interactive-homepages', 'both English locale options become anchors', 'active locale must be an inert span', async (root) => {
+    await mutateText(resolve(root, 'en/index.html'), (html) => replaceRequired(html, /<span class="lang-toggle__option is-active" data-lang-pill="en" aria-current="page">EN<\/span>/i, '<a class="lang-toggle__option is-active" data-lang-pill="en" href="/webgl-portfolio/en/" aria-current="page">EN</a>', 'both locale options anchors'));
+  }),
+  architectureCase('ADV-111', 'obsolete static homeDocument source is restored', 'Obsolete static homeDocument() source of truth is active', async (root) => {
+    await mutateText(resolve(root, 'scripts/generate-static-site.ts'), (source) => `${source}\nfunction homeDocument() { return '<html></html>'; }\n`);
+  }),
+  architectureCase('ADV-112', 'English homepage hardening target is removed from source', 'Homepage hardener does not include dist/en/index.html', async (root) => {
+    await mutateText(resolve(root, 'scripts/harden-homepage.ts'), (source) => replaceRequired(source, "  resolve(process.cwd(), 'dist', 'en', 'index.html'),\n", '', 'English hardening target'));
+  }),
+  architectureCase('ADV-113', 'runtime locale is hardcoded back to Russian', 'Runtime locale is hardcoded to RU', async (root) => {
+    await mutateText(resolve(root, 'src/main.ts'), (source) => `${source}\nconst locale: Locale = 'ru';\n`);
+  }),
 ];
 
 for (const test of cases) await expectFailure(test);
@@ -594,7 +706,7 @@ for (const test of cases) await expectFailure(test);
 const summary = {
   schemaVersion: 1,
   generatedAt: new Date().toISOString(),
-  subject: 'CPH-WEBGL-PORTFOLIO-STATIC-SEO-REMEDIATION-02',
+  subject: 'WEBGL-PORTFOLIO-INTERACTIVE-EN-AND-HERO-ARTIFACT-REMEDIATION-08',
   baselineValidators: baselineChecks.map(([name, script]) => ({ name, command: commandDisplay(node, [script]), status: 'PASS' })).concat([{ name: 'content', command: commandDisplay(bun, ['scripts/validate-content.ts']), status: 'PASS' }]),
   positiveWorkflowVariants,
   total: reports.length,

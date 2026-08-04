@@ -20,34 +20,40 @@ function routeFile(path: string): string {
   return relative ? resolve(dist, relative, 'index.html') : resolve(dist, 'index.html');
 }
 
+const homeRoutes = manifest.routes.filter((route) => route.type === 'home');
+if (homeRoutes.length !== 2 || !homeRoutes.some((route) => route.locale === 'ru') || !homeRoutes.some((route) => route.locale === 'en')) {
+  throw new Error('Expected exactly one RU and one EN homepage route before static navigation finalization.');
+}
+const expectedContentPages = manifest.routes.filter((route) => route.type !== 'home').length;
 let repairedNavigationPages = 0;
 
 for (const route of manifest.routes) {
-  if (route.locale !== 'ru' || route.type === 'home') continue;
+  if (route.type === 'home') continue;
 
   const file = routeFile(route.path);
   const source = await readFile(file, 'utf8');
-  const casesHref = `${manifest.basePath}#cases`;
-  const insightsHref = `${manifest.basePath}#insights`;
+  const homePath = route.locale === 'en' ? `${manifest.basePath}en/` : manifest.basePath;
+  const casesHref = `${homePath}#cases`;
+  const insightsHref = `${homePath}#insights`;
 
   if (!source.includes(casesHref) || !source.includes(insightsHref)) {
     throw new Error(`${route.path}: expected localized navigation targets are missing before finalization.`);
   }
 
   const repaired = source
-    .replaceAll(casesHref, `${manifest.basePath}#projects`)
-    .replaceAll(insightsHref, `${manifest.basePath}#explore`);
+    .replaceAll(casesHref, `${homePath}#projects`)
+    .replaceAll(insightsHref, `${homePath}#explore`);
 
-  if (repaired === source) {
-    throw new Error(`${route.path}: localized navigation finalization made no changes.`);
+  if (repaired === source || repaired.includes(casesHref) || repaired.includes(insightsHref)) {
+    throw new Error(`${route.path}: localized navigation finalization was incomplete.`);
   }
 
   await writeFile(file, repaired, 'utf8');
   repairedNavigationPages += 1;
 }
 
-if (repairedNavigationPages !== 13) {
-  throw new Error(`Expected to finalize navigation for 13 Russian content pages, finalized ${repairedNavigationPages}.`);
+if (repairedNavigationPages !== expectedContentPages) {
+  throw new Error(`Expected to finalize navigation for ${expectedContentPages} localized content pages, finalized ${repairedNavigationPages}.`);
 }
 
-console.log(`Finalized navigation for ${repairedNavigationPages} Russian content pages.`);
+console.log(`Finalized navigation for ${repairedNavigationPages} localized content pages.`);

@@ -1,16 +1,11 @@
 import * as THREE from 'three';
 import { particlesVertex, particlesFragment } from './shaders';
 
-/**
- * Ambient starfield-style particles in a spherical shell around the core,
- * plus a few bright "comet" particles whose motion + bloom read as light trails.
- */
+/** Ambient starfield-style particles in a spherical shell around the core. */
 export class Particles {
   group = new THREE.Group();
 
   private material: THREE.ShaderMaterial;
-  private comets: THREE.Mesh[] = [];
-  private cometData: { radius: number; speed: number; tilt: number; phase: number }[] = [];
 
   constructor(colorA: THREE.Color, colorB: THREE.Color, count: number) {
     const positions = new Float32Array(count * 3);
@@ -62,26 +57,6 @@ export class Particles {
     });
 
     this.group.add(new THREE.Points(geometry, this.material));
-    this.createComets(colorA, colorB);
-  }
-
-  private createComets(colorA: THREE.Color, colorB: THREE.Color): void {
-    const cometGeometry = new THREE.SphereGeometry(0.025, 8, 8);
-    for (let i = 0; i < 5; i++) {
-      const color = colorA.clone().lerp(colorB, i / 4);
-      const mesh = new THREE.Mesh(
-        cometGeometry,
-        new THREE.MeshBasicMaterial({ color: color.multiplyScalar(2.2) }),
-      );
-      this.comets.push(mesh);
-      this.cometData.push({
-        radius: 2.2 + i * 0.45,
-        speed: 0.25 + Math.random() * 0.3,
-        tilt: (Math.random() - 0.5) * 1.2,
-        phase: Math.random() * Math.PI * 2,
-      });
-      this.group.add(mesh);
-    }
   }
 
   update(time: number, scroll: number): void {
@@ -92,16 +67,5 @@ export class Particles {
       0.05,
     );
     this.group.rotation.y = time * 0.012;
-
-    for (let i = 0; i < this.comets.length; i++) {
-      const d = this.cometData[i];
-      const a = time * d.speed + d.phase;
-      const comet = this.comets[i];
-      comet.position.set(
-        Math.cos(a) * d.radius,
-        Math.sin(a * 0.9) * d.radius * 0.35 + Math.sin(d.tilt) * 0.6,
-        Math.sin(a) * d.radius * Math.cos(d.tilt),
-      );
-    }
   }
 }

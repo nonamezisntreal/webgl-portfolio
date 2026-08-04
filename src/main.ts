@@ -12,7 +12,29 @@ import { initInteractions, bindMagnetic } from './ui/interactions';
 import { Experience } from './webgl/Experience';
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-const locale: Locale = 'ru';
+
+function localeFromDocument(): Locale {
+  const declared = document.documentElement.dataset.locale;
+  if (declared !== 'ru' && declared !== 'en') {
+    throw new Error(`Unsupported or missing document locale: ${String(declared)}`);
+  }
+
+  const configuredBase = import.meta.env.BASE_URL.endsWith('/')
+    ? import.meta.env.BASE_URL
+    : `${import.meta.env.BASE_URL}/`;
+  const normalizedPath = window.location.pathname.replace(/\/{2,}/g, '/');
+  const relativePath = normalizedPath.startsWith(configuredBase)
+    ? normalizedPath.slice(configuredBase.length)
+    : normalizedPath.replace(/^\//, '');
+  const routeLocale: Locale = relativePath.split('/').filter(Boolean)[0] === 'en' ? 'en' : 'ru';
+
+  if (routeLocale !== declared) {
+    throw new Error(`Document locale ${declared} does not match route locale ${routeLocale}.`);
+  }
+  return declared;
+}
+
+const locale: Locale = localeFromDocument();
 
 function setText(id: string, value: string): void {
   const el = document.getElementById(id);
@@ -33,9 +55,14 @@ function applyLocale(currentLocale: Locale): void {
   const t = getCopy(currentLocale);
 
   document.documentElement.lang = currentLocale;
+  document.documentElement.dataset.locale = currentLocale;
   document.title = t.meta.title;
   document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute('content', t.meta.description);
+  document.querySelector<HTMLElement>('.header__nav')?.setAttribute('aria-label', currentLocale === 'ru' ? 'Основная навигация' : 'Primary navigation');
+  document.getElementById('lang-toggle')?.setAttribute('aria-label', currentLocale === 'ru' ? 'Выбор языка' : 'Language selection');
+  document.getElementById('case-close')?.setAttribute('aria-label', currentLocale === 'ru' ? 'Закрыть описание проекта' : 'Close project details');
 
+  setText('skip-link', currentLocale === 'ru' ? 'Перейти к основному содержимому' : 'Skip to main content');
   setText('loader-label', t.loaderLabel);
   setText('nav-about', t.nav.about);
   setText('nav-projects', t.nav.projects);
@@ -81,16 +108,17 @@ function applyLocale(currentLocale: Locale): void {
   setText('footer-built', t.footer.built);
   setText('footer-top', t.footer.top);
 
-  document.querySelectorAll('[data-lang-pill]').forEach((pill) => {
-    pill.classList.toggle('is-active', (pill as HTMLElement).dataset.langPill === currentLocale);
-  });
+  const activeLocale = document.querySelector<HTMLElement>('[data-lang-pill][aria-current="page"]');
+  if (activeLocale?.dataset.langPill !== currentLocale || activeLocale.tagName === 'A') {
+    throw new Error('Language switcher markup does not match the declared locale.');
+  }
 
   renderContent(currentLocale);
   initTilt(reducedMotion);
   if (!reducedMotion) bindMagnetic();
 }
 
-/* The root canonical URL is always Russian. English content lives at /en/. */
+/* Locale is declared by the physical HTML artifact and verified against its canonical route. */
 applyLocale(locale);
 
 /* UI layer works even if WebGL fails. */

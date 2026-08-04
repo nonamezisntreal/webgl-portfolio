@@ -9,7 +9,7 @@ A dark interactive WebGL homepage plus statically generated service, case-study 
 ## ✦ What the build produces
 
 - interactive Russian homepage at `/webgl-portfolio/`;
-- static English homepage at `/webgl-portfolio/en/`;
+- interactive English homepage at `/webgl-portfolio/en/`, sharing the exact Vite/Three.js runtime while declaring its locale in the physical HTML artifact and verifying it against the pathname;
 - five service pages in RU and EN;
 - four case-study pages in RU and EN;
 - four technical insight pages in RU and EN;
@@ -54,12 +54,14 @@ bun run build
 workflow policy validation
 → TypeScript check
 → content registry validation
-→ Vite asset build
-→ localized static page generation
-→ homepage performance hardening
-→ localized navigation finalization
+→ localized homepage source-architecture validation
+→ hero scene source-contract validation
+→ shared Vite/Three.js asset build
+→ localized interactive homepage assembly plus static content generation
+→ identical hardening of RU and EN homepages
+→ manifest-bound navigation finalization for RU and EN static pages
 → deterministic metadata and mtime normalization
-→ complete dist and public-claim validation
+→ complete interactive/static dist and public-claim validation
 ```
 
 ## ⌬ Content sources
@@ -70,10 +72,14 @@ There is no second project registry.
 - `src/static-pages.ts` contains only static routes, extended service/insight content, capability tags and relationships.
 - `src/public-claims.ts` contains verified public performance, localization and deployment wording used by the canonical content source.
 - `scripts/validate-content.ts` binds the content sources and fails on duplicate IDs, broken relationships, missing localization or public-profile drift.
-- `scripts/finalize-static-site.ts` repairs only bounded GitHub Pages navigation compatibility on generated Russian content pages.
+- `scripts/generate-static-site.ts` takes the Vite-built homepage shell, emits localized RU and EN interactive artifacts from that shared runtime, adds localized SEO directories, and separately generates only service/case/insight pages.
+- `scripts/harden-homepage.ts` prepares and hardens `dist/index.html` and `dist/en/index.html` as one exact fail-closed set.
+- `scripts/finalize-static-site.ts` derives the complete non-home route set from `routes-manifest.json` and repairs RU/EN static navigation to the real `#services`, `#projects` and `#explore` homepage targets.
 - `scripts/normalize-artifact.mjs` derives `generatedAt` from versioned content dates, canonicalizes text artifacts to LF and normalizes all `dist` mtimes.
+- `scripts/validate-localized-homepage-architecture.mjs` prevents restoration of a static EN homepage, hardcoded RU runtime locale, redirect/local-storage locale state or one-sided hardening.
+- `scripts/validate-hero-scene.mjs` prevents restoration of the intrusive spherical comet meshes while requiring the core, shader particle field, rings, shards and bloom to remain present.
 - `scripts/validate-public-claims.mjs` rejects obsolete wording and numeric frame-rate promises in canonical source, generated HTML and JavaScript bundles.
-- `scripts/validate-dist.mjs` requires one canonical per page, parseable JSON-LD and a bounded non-WebGL runtime contract for static pages.
+- `scripts/validate-dist.mjs` validates both homepages as shared interactive application entries and retains a bounded non-WebGL runtime contract for every static content page.
 - `scripts/validate-workflow-policy.mjs` enforces immutable Actions, Bun `1.3.14`, exact PR-head checkout, least privilege and positive deployment guards.
 
 Changing the exact canonical portfolio URL requires an explicit migration because FreelanceBot uses:
@@ -85,24 +91,29 @@ https://nonamezisntreal.github.io/webgl-portfolio/
 ## ▣ Architecture
 
 ```text
-src/content.ts
-src/static-pages.ts
-src/public-claims.ts
-        │
-        ├── homepage runtime (Vite + Three.js)
-        └── scripts/generate-static-site.ts
-                     │
-                     ├── /en/
-                     ├── /services/*
-                     ├── /cases/*
-                     ├── /insights/*
-                     ├── sitemap.xml
-                     ├── robots.txt
-                     ├── portfolio-links.json
-                     └── routes-manifest.json
+index.html + src/main.ts + shared CSS + src/webgl/*
+                         │
+                         └── Vite builds one application runtime
+                                      │
+                                      ▼
+                         scripts/generate-static-site.ts
+                         ├── post-processes RU  /index.html
+                         ├── emits EN interactive /en/index.html
+                         ├── generates RU/EN /services/*
+                         ├── generates RU/EN /cases/*
+                         ├── generates RU/EN /insights/*
+                         └── emits sitemap, robots and registries
+                                      │
+                         scripts/harden-homepage.ts
+                         └── hardens RU + EN as one exact set
+                                      │
+                         scripts/finalize-static-site.ts
+                         └── binds both static locale trees to real homepage anchors
 ```
 
-The content pages do not load Three.js or client-side routing. Every public URL has a physical `index.html`, so direct navigation and reload work on GitHub Pages.
+The two physical homepages share the same module and stylesheet references. Locale is declared before runtime boot through `html[data-locale]`, checked against the physical path, and never selected through a redirect or `localStorage`. The active locale is an inert `span`; only the counterpart locale is an ordinary anchor.
+
+Service, case-study and insight pages remain static and do not load Three.js or the homepage module. Every public URL has a physical `index.html`, so direct navigation, hard reload and browser history work on GitHub Pages.
 
 ## ⚡ Deploy
 
@@ -133,8 +144,13 @@ The build fails when any of the following occurs:
 - canonical portfolio URL drift;
 - profile contact drift between runtime and static output;
 - missing generated route;
+- restoration of a static EN homepage or loss of the shared application module/canvas;
+- hardcoded runtime locale, redirect/local-storage locale state or a document/path mismatch;
+- an active locale implemented as a link, wrong counterpart URL or touch target below 44×44 CSS pixels;
+- one-sided or repeated homepage hardening;
 - incorrect canonical or `hreflang`;
 - missing title, description, H1 or structured data;
+- restoration of bright spherical comet meshes near the hero core or removal of the preserved core/particles/rings/shards/bloom composition;
 - Three.js/module loading on static content pages;
 - broken internal URLs or fragments;
 - URL shorteners or tracking parameters in `portfolio-links.json`;
