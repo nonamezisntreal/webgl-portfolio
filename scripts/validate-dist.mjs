@@ -2,6 +2,7 @@ import { access, readFile, readdir } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { extname, relative, resolve, sep } from 'node:path';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
+import { assertExactKeys, decodeHtmlEntities, normalizeTextNfc, parseJsonStrict, visiblePerceivedText } from './validation-utils.mjs';
 
 const projectRoot = resolve(process.env.PROJECT_ROOT ?? process.cwd());
 const dist = resolve(projectRoot, process.env.DIST_DIR ?? 'dist');
@@ -9,6 +10,7 @@ const canonicalOrigin = 'https://nonamezisntreal.github.io';
 const canonicalBasePath = '/webgl-portfolio/';
 const canonicalHomepage = `${canonicalOrigin}${canonicalBasePath}`;
 const canonicalSitemap = `${canonicalHomepage}sitemap.xml`;
+const allowedExternalAssetOrigins = new Set(['https://fonts.googleapis.com', 'https://fonts.gstatic.com']);
 const requiredFiles = ['index.html', 'robots.txt', 'sitemap.xml', '404.html', 'portfolio-links.json', 'routes-manifest.json'];
 const textExtensions = new Set(['.css', '.html', '.js', '.json', '.svg', '.txt', '.xml']);
 const analyticsBody = "document.addEventListener('click',function(e){var a=e.target.closest('[data-portfolio-event]');if(!a)return;window.dispatchEvent(new CustomEvent('portfolio:event',{detail:{event:a.dataset.portfolioEvent,pageType:document.body.dataset.pageType,pageId:document.body.dataset.pageId,locale:document.documentElement.lang,href:a.href||null}}));});";
@@ -27,11 +29,7 @@ function isObject(value) {
 }
 
 function parseJson(source, label) {
-  try {
-    return JSON.parse(source);
-  } catch (error) {
-    throw new Error(`${label} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  return parseJsonStrict(source, label);
 }
 
 function normalizedRelative(root, file) {
@@ -85,25 +83,15 @@ function scriptAttribute(script, name) {
 }
 
 function decodeHtml(value) {
-  return value
-    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(Number.parseInt(code, 16)))
-    .replaceAll('&quot;', '"')
-    .replaceAll('&#39;', "'")
-    .replaceAll('&lt;', '<')
-    .replaceAll('&gt;', '>')
-    .replaceAll('&amp;', '&');
+  return decodeHtmlEntities(value);
 }
 
 function normalizeText(value) {
-  return decodeHtml(String(value)).replace(/\s+/g, ' ').trim();
+  return normalizeTextNfc(value);
 }
 
 function visibleText(html) {
-  const body = html.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i)?.[1] ?? html;
-  return normalizeText(body
-    .replace(/<(?:script|style|template|noscript)\b[^>]*>[\s\S]*?<\/(?:script|style|template|noscript)>/gi, ' ')
-    .replace(/<[^>]+>/g, ' '));
+  return visiblePerceivedText(html);
 }
 
 function assertVisible(text, value, label) {
@@ -158,15 +146,23 @@ function stableJson(value) {
 function flattenJsonLd(value, label) {
   if (Array.isArray(value)) {
     assert(value.length > 0, `${label} must not be an empty array.`);
-    return value.flatMap((item, index) => flattenJsonLd(item, `${label}[${index}]`));
+    return value.map((item, index) => {
+      assert(!Array.isArray(item), `${label}[${index}] must contain a nonempty object; nested JSON-LD arrays are forbidden.`);
+      assert(isObject(item) && Object.keys(item).length > 0, `${label}[${index}] must contain a nonempty object.`);
+      assert(!Object.hasOwn(item, '@graph'), `${label}[${index}] may not hide objects in an unsupported @graph container.`);
+      return item;
+    });
   }
   assert(isObject(value) && Object.keys(value).length > 0, `${label} must contain a nonempty object.`);
   assert(!Object.hasOwn(value, '@graph'), `${label} may not hide objects in an unsupported @graph container.`);
   return [value];
 }
 
-function validatePerson(value, label, { url }) {
+function validatePerson(value, label, { url, profile = false }) {
   assert(isObject(value), `${label} must be an object.`);
+  assertExactKeys(value, profile
+    ? ['@type', 'name', 'url', 'description', 'sameAs', 'knowsAbout']
+    : ['@type', 'name', 'url'], label);
   assert(value['@type'] === 'Person', `${label}.@type must be Person.`);
   assert(value.name === expectedIdentity.name, `${label}.name must match the canonical public identity.`);
   validateHttpsUrl(value.url, `${label}.url`, { exact: url });
@@ -191,6 +187,18 @@ function validateJsonLd(html, label, route, canonical, metaDescription, h1) {
 
   const allowedTypes = route.type === 'home' ? ['ProfilePage'] : route.type === 'service' ? ['Service', 'FAQPage'] : ['TechArticle'];
   for (const object of objects) assert(allowedTypes.includes(object['@type']), `${label}: unsupported JSON-LD @type ${object['@type']} for route type ${route.type}.`);
+  const topLevelContracts = {
+    ProfilePage: ['@context', '@type', 'mainEntity'],
+    Service: ['@context', '@type', 'name', 'description', 'url', 'provider'],
+    FAQPage: ['@context', '@type', 'mainEntity'],
+    TechArticle: ['@context', '@type', 'headline', 'description', 'datePublished', 'dateModified', 'author', 'mainEntityOfPage'],
+  };
+  for (const object of objects) {
+    const keys = object['@type'] === 'TechArticle' && Object.hasOwn(object, 'keywords')
+      ? [...topLevelContracts.TechArticle, 'keywords']
+      : topLevelContracts[object['@type']];
+    assertExactKeys(object, keys, `${label}: ${object['@type']}`);
+  }
   const byType = new Map(allowedTypes.map((type) => [type, objects.filter((item) => item['@type'] === type)]));
   const primaryType = route.type === 'home' ? 'ProfilePage' : route.type === 'service' ? 'Service' : 'TechArticle';
   assert(byType.get(primaryType).length === 1, `${label}: expected exactly one ${primaryType} object.`);
@@ -200,9 +208,10 @@ function validateJsonLd(html, label, route, canonical, metaDescription, h1) {
   const pageText = visibleText(html);
   const primary = byType.get(primaryType)[0];
   if (primaryType === 'ProfilePage') {
-    validatePerson(primary.mainEntity, `${label}: ProfilePage.mainEntity`, { url: canonical });
+    validatePerson(primary.mainEntity, `${label}: ProfilePage.mainEntity`, { url: canonical, profile: true });
     assert(primary.mainEntity.description === metaDescription, `${label}: profile description does not match the localized page description.`);
     assertVisible(pageText, primary.mainEntity.name, `${label}: profile name`);
+    assert(Array.isArray(primary.mainEntity.knowsAbout) && primary.mainEntity.knowsAbout.length > 0 && primary.mainEntity.knowsAbout.every((item) => typeof item === 'string' && item.trim().length > 0), `${label}: ProfilePage.mainEntity.knowsAbout must be a nonempty string array.`);
     assert(Array.isArray(primary.mainEntity.sameAs), `${label}: ProfilePage.mainEntity.sameAs must be an array.`);
     assert(JSON.stringify([...primary.mainEntity.sameAs].sort()) === JSON.stringify([...expectedIdentity.sameAs].sort()), `${label}: ProfilePage.mainEntity.sameAs does not match the expected public profiles.`);
     for (const [index, url] of primary.mainEntity.sameAs.entries()) validateHttpsUrl(url, `${label}: sameAs[${index}]`);
@@ -218,6 +227,7 @@ function validateJsonLd(html, label, route, canonical, metaDescription, h1) {
     assert(typeof primary.headline === 'string' && primary.headline.length > 0, `${label}: TechArticle.headline is required.`);
     assert(typeof primary.description === 'string' && primary.description.length > 0, `${label}: TechArticle.description is required.`);
     assert(primary.description === metaDescription, `${label}: TechArticle.description does not match the page description.`);
+    if (Object.hasOwn(primary, 'keywords')) assert((typeof primary.keywords === 'string' && primary.keywords.trim().length > 0) || (Array.isArray(primary.keywords) && primary.keywords.length > 0 && primary.keywords.every((item) => typeof item === 'string' && item.trim().length > 0)), `${label}: TechArticle.keywords must be a nonempty string or string array.`);
     const published = dateValue(primary.datePublished, `${label}: TechArticle.datePublished`);
     const modified = dateValue(primary.dateModified, `${label}: TechArticle.dateModified`);
     assert(published <= modified, `${label}: TechArticle.datePublished must not be after dateModified.`);
@@ -235,11 +245,13 @@ function validateJsonLd(html, label, route, canonical, metaDescription, h1) {
     const questions = new Set();
     for (const [index, question] of faq.mainEntity.entries()) {
       assert(isObject(question) && question['@type'] === 'Question', `${label}: FAQ item ${index + 1} must be a Question.`);
+      assertExactKeys(question, ['@type', 'name', 'acceptedAnswer'], `${label}: FAQ question ${index + 1}`);
       assert(typeof question.name === 'string' && question.name.trim().length > 0, `${label}: FAQ question ${index + 1} is empty.`);
-      const normalizedQuestion = normalizeText(question.name).toLocaleLowerCase();
+      const normalizedQuestion = normalizeText(question.name).normalize('NFKC').toLocaleLowerCase();
       assert(!questions.has(normalizedQuestion), `${label}: duplicate FAQ question detected.`);
       questions.add(normalizedQuestion);
       assert(isObject(question.acceptedAnswer) && question.acceptedAnswer['@type'] === 'Answer', `${label}: FAQ answer ${index + 1} must be an Answer.`);
+      assertExactKeys(question.acceptedAnswer, ['@type', 'text'], `${label}: FAQ answer ${index + 1}`);
       assert(typeof question.acceptedAnswer.text === 'string' && question.acceptedAnswer.text.trim().length > 0, `${label}: FAQ answer ${index + 1} is empty.`);
       assertVisible(pageText, question.name, `${label}: FAQ question ${index + 1}`);
       assertVisible(pageText, question.acceptedAnswer.text, `${label}: FAQ answer ${index + 1}`);
@@ -277,6 +289,8 @@ function htmlPath(file, basePath) {
 }
 
 function parseSitemap(source) {
+  assert(!/<!DOCTYPE|<!ENTITY|\bSYSTEM\b|\bPUBLIC\b|<!\[CDATA\[/iu.test(source), 'sitemap.xml contains forbidden DOCTYPE, entity or external-authority syntax.');
+  assert(/^\s*(?:<\?xml\s+version=["']1\.0["']\s+encoding=["']UTF-8["']\s*\?>\s*)?<urlset\b[\s\S]*<\/urlset>\s*$/u.test(source), 'sitemap.xml is malformed XML or contains partial/ambiguous root content.');
   const validation = XMLValidator.validate(source, { allowBooleanAttributes: false });
   assert(validation === true, `sitemap.xml is malformed XML: ${validation.err?.msg ?? 'unknown XML error'}.`);
   const parser = new XMLParser({
@@ -284,16 +298,18 @@ function parseSitemap(source) {
     attributeNamePrefix: '@_',
     parseTagValue: false,
     trimValues: true,
-    processEntities: true,
+    processEntities: false,
+    ignoreDeclaration: true,
     isArray: (_name, path) => path === 'urlset.url' || path === 'urlset.url.xhtml:link',
   });
   const document = parser.parse(source);
-  assert(isObject(document) && isObject(document.urlset), 'sitemap.xml must contain one urlset root.');
+  assert(isObject(document), 'sitemap.xml must contain one urlset root.');
+  assertExactKeys(document, ['urlset'], 'sitemap.xml document');
+  assert(isObject(document.urlset), 'sitemap.xml must contain one urlset root.');
   const root = document.urlset;
   assert(root['@_xmlns'] === 'http://www.sitemaps.org/schemas/sitemap/0.9', 'sitemap.xml uses an unexpected sitemap namespace.');
   assert(root['@_xmlns:xhtml'] === 'http://www.w3.org/1999/xhtml', 'sitemap.xml uses an unexpected XHTML namespace.');
-  const rootKeys = Object.keys(root).sort();
-  assert(JSON.stringify(rootKeys) === JSON.stringify(['@_xmlns', '@_xmlns:xhtml', 'url'].sort()), `sitemap.xml contains unexpected root members: ${rootKeys.join(', ')}.`);
+  assertExactKeys(root, ['@_xmlns', '@_xmlns:xhtml', 'url'], 'sitemap.xml urlset');
   assert(Array.isArray(root.url), 'sitemap.xml url entries must be an array.');
   return root.url;
 }
@@ -305,8 +321,8 @@ function validateSitemap(source, manifest) {
   const seen = new Set();
   for (const [index, entry] of entries.entries()) {
     assert(isObject(entry), `sitemap.xml URL entry ${index + 1} is invalid.`);
-    const keys = Object.keys(entry).sort();
-    assert(JSON.stringify(keys) === JSON.stringify(['lastmod', 'loc', 'xhtml:link'].sort()), `sitemap.xml URL entry ${index + 1} contains unexpected fields.`);
+    assertExactKeys(entry, ['lastmod', 'loc', 'xhtml:link'], `sitemap.xml URL entry ${index + 1}`);
+    assert(typeof entry.loc === 'string' && entry.loc.trim().length > 0, `sitemap.xml loc ${index + 1} must be a nonempty URL scalar; duplicate <loc> nodes are forbidden.`);
     const loc = normalizeText(entry.loc);
     validateHttpsUrl(loc, `sitemap.xml loc ${index + 1}`, { origin: canonicalOrigin, underBasePath: true });
     assert(!seen.has(loc), `sitemap.xml contains duplicate loc ${loc}.`);
@@ -323,9 +339,14 @@ function validateSitemap(source, manifest) {
     ]);
     const actualAlternates = new Set();
     for (const alternate of entry['xhtml:link']) {
-      assert(isObject(alternate) && alternate['@_rel'] === 'alternate', `sitemap.xml ${loc} contains malformed alternate metadata.`);
+      assert(isObject(alternate), `sitemap.xml ${loc} contains malformed alternate metadata.`);
+      assertExactKeys(alternate, ['@_rel', '@_hreflang', '@_href'], `sitemap.xml alternate for ${loc}`);
+      assert(alternate['@_rel'] === 'alternate', `sitemap.xml ${loc} contains malformed alternate metadata.`);
+      assert(['ru', 'en', 'x-default'].includes(alternate['@_hreflang']), `sitemap.xml ${loc} contains an unsupported hreflang authority.`);
       validateHttpsUrl(alternate['@_href'], `sitemap.xml alternate for ${loc}`, { origin: canonicalOrigin, underBasePath: true });
-      actualAlternates.add(`${alternate['@_hreflang']}|${alternate['@_href']}`);
+      const tuple = `${alternate['@_hreflang']}|${alternate['@_href']}`;
+      assert(!actualAlternates.has(tuple), `sitemap.xml ${loc} contains duplicate alternate metadata.`);
+      actualAlternates.add(tuple);
     }
     assert(JSON.stringify([...actualAlternates].sort()) === JSON.stringify([...expectedAlternates].sort()), `sitemap.xml alternates mismatch for ${loc}.`);
   }
@@ -368,10 +389,17 @@ function validateRobots(source) {
 }
 
 function splitSrcset(value, label) {
-  return value.split(',').map((candidate) => candidate.trim()).filter(Boolean).map((candidate) => {
-    const url = candidate.split(/\s+/)[0];
-    assert(url.length > 0, `${label} contains an empty srcset candidate.`);
-    return url;
+  const candidates = value.split(',').map((candidate) => candidate.trim()).filter(Boolean);
+  assert(candidates.length > 0, `${label} contains no srcset candidates.`);
+  const descriptors = new Set();
+  return candidates.map((candidate) => {
+    const parts = candidate.split(/\s+/u);
+    assert(parts.length >= 1 && parts.length <= 2 && parts[0].length > 0, `${label} contains a malformed srcset candidate.`);
+    const descriptor = parts[1] ?? '1x';
+    assert(/^(?:[1-9]\d*)w$/u.test(descriptor) || /^(?:\d+(?:\.\d+)?)x$/u.test(descriptor) && Number.parseFloat(descriptor) > 0, `${label} contains invalid srcset descriptor ${descriptor}.`);
+    assert(!descriptors.has(descriptor), `${label} contains duplicate srcset descriptor ${descriptor}.`);
+    descriptors.add(descriptor);
+    return parts[0];
   });
 }
 
@@ -388,10 +416,29 @@ function rawTraversal(value, label) {
   assert(!decoded.split('/').some((segment) => segment === '.' || segment === '..'), `${label} contains path traversal.`);
 }
 
+async function exactCaseAssetPath(relativePath, label) {
+  const segments = relativePath.split('/').filter(Boolean);
+  assert(segments.length > 0, `${label} does not identify an asset file.`);
+  let current = dist;
+  for (const segment of segments) {
+    assert(segment === segment.normalize('NFC'), `${label} contains a non-NFC path segment.`);
+    const names = (await readdir(current, { withFileTypes: true })).map((entry) => entry.name);
+    if (!names.includes(segment)) {
+      const collision = names.find((name) => name.toLocaleLowerCase('en-US') === segment.toLocaleLowerCase('en-US'));
+      if (collision) throw new Error(`${label} has a case-sensitive path mismatch: requested ${segment}, generated ${collision}.`);
+      throw new Error(`${label} references missing internal asset ${relativePath}.`);
+    }
+    current = resolve(current, segment);
+  }
+  return current;
+}
+
 async function validateInternalAssetReference(value, pagePath, label, manifest) {
   assert(typeof value === 'string' && value.trim().length > 0, `${label} is empty.`);
+  assert(value === value.trim() && !/[\u0000-\u001f\u007f]/u.test(value), `${label} contains whitespace or control characters.`);
   if (/^(?:data|blob):/i.test(value)) return;
   assert(!/^javascript:/i.test(value), `${label} uses javascript:.`);
+  assert(!value.startsWith('//'), `${label} uses a forbidden protocol-relative external reference.`);
   rawTraversal(value, label);
   let target;
   try {
@@ -399,7 +446,13 @@ async function validateInternalAssetReference(value, pagePath, label, manifest) 
   } catch {
     throw new Error(`${label} is a malformed URL.`);
   }
-  if (target.origin !== manifest.origin) return;
+  assert(target.protocol === 'https:', `${label} must use HTTPS.`);
+  assert(target.username === '' && target.password === '', `${label} must not contain URL userinfo.`);
+  if (target.origin !== manifest.origin) {
+    assert(allowedExternalAssetOrigins.has(target.origin), `${label} references an unapproved external asset authority.`);
+    assert(target.hash === '', `${label} external asset must not contain a fragment.`);
+    return;
+  }
   assert(target.pathname.startsWith(manifest.basePath), `${label} escapes the project base path: ${value}.`);
   assert(target.search === '' && target.hash === '', `${label} must not use query parameters or fragments.`);
   let relativePath;
@@ -408,8 +461,7 @@ async function validateInternalAssetReference(value, pagePath, label, manifest) 
   } catch {
     throw new Error(`${label} contains malformed URL encoding.`);
   }
-  assert(relativePath.length > 0, `${label} does not identify an asset file.`);
-  const file = resolve(dist, relativePath);
+  const file = await exactCaseAssetPath(relativePath, label);
   assert(file === dist || file.startsWith(`${dist}${sep}`), `${label} resolves outside dist.`);
   try {
     await access(file, constants.R_OK);
@@ -459,6 +511,16 @@ assert(manifest.origin === canonicalOrigin, `Unexpected site origin: ${manifest.
 assert(Array.isArray(manifest.routes), 'Routes manifest is invalid.');
 assert(manifest.routes.length === 28, `Expected 28 localized routes, got ${manifest.routes.length}.`);
 assert(new Set(manifest.routes.map((route) => route.path)).size === manifest.routes.length, 'Routes manifest contains duplicate paths.');
+const routePathAuthorities = new Map();
+for (const route of manifest.routes) {
+  assert(route.path === route.path.normalize('NFC') && route.counterpartPath === route.counterpartPath.normalize('NFC'), `Route ${route.id} contains a non-NFC path.`);
+  for (const path of [route.path, route.counterpartPath]) {
+    const authority = path.normalize('NFC').toLocaleLowerCase('en-US');
+    const previous = routePathAuthorities.get(authority);
+    assert(previous === undefined || previous === path, `Routes manifest contains a mixed-case or Unicode-equivalent path collision: ${previous} and ${path}.`);
+    routePathAuthorities.set(authority, path);
+  }
+}
 assert(new Set(manifest.routes.map((route) => `${route.locale}:${route.type}:${route.id}`)).size === manifest.routes.length, 'Routes manifest contains duplicate locale/type/ID records.');
 for (const route of manifest.routes) {
   assert(['ru', 'en'].includes(route.locale), `Route ${route.path} has invalid locale.`);
@@ -609,9 +671,29 @@ assert(!registryText.includes('bit.ly') && !registryText.includes('t.co'), 'Port
 
 const artifactFiles = await listFiles(dist);
 assert(artifactFiles.length === 38, `Expected exactly 38 extracted dist artifacts, found ${artifactFiles.length}.`);
+const artifactAuthorities = new Map();
 for (const file of artifactFiles) {
+  const artifactPath = normalizedRelative(dist, file);
+  assert(artifactPath === artifactPath.normalize('NFC'), `${artifactPath}: generated artifact path is not NFC-normalized.`);
+  const authority = artifactPath.toLocaleLowerCase('en-US');
+  const previous = artifactAuthorities.get(authority);
+  assert(previous === undefined, `Generated artifacts contain a mixed-case path collision: ${previous} and ${artifactPath}.`);
+  artifactAuthorities.set(authority, artifactPath);
   if (!textExtensions.has(extname(file).toLowerCase())) continue;
-  assert(!(await readFile(file, 'utf8')).includes('\r'), `${normalizedRelative(dist, file)}: text artifact contains non-LF line endings.`);
+  const source = await readFile(file, 'utf8');
+  assert(!source.includes('\r'), `${artifactPath}: text artifact contains non-LF line endings.`);
+  const assetPagePath = `${canonicalBasePath}${artifactPath}`;
+  if (extname(file).toLowerCase() === '.css') {
+    for (const match of source.matchAll(/url\(\s*(?:"([^"]+)"|'([^']+)'|([^)'"\s][^)]*?))\s*\)/giu)) {
+      const value = (match[1] ?? match[2] ?? match[3]).trim();
+      await validateInternalAssetReference(value, assetPagePath, `${artifactPath}: CSS url()`, manifest);
+    }
+  }
+  if (['.css', '.js'].includes(extname(file).toLowerCase())) {
+    for (const match of source.matchAll(/[#@]\s*sourceMappingURL\s*=\s*([^\s*]+)/giu)) {
+      await validateInternalAssetReference(match[1], assetPagePath, `${artifactPath}: sourceMappingURL`, manifest);
+    }
+  }
 }
 
 console.log(`Validated ${manifest.routes.length} localized routes, ${htmlFiles.length} HTML files and ${artifactFiles.length} artifacts: semantic JSON-LD, structural sitemap/robots parity, internal assets, canonical SEO, bounded static runtime, links and public registry.`);

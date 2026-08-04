@@ -1,5 +1,6 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { relative, resolve, sep } from 'node:path';
+import { claimTextSurfaces } from './validation-utils.mjs';
 
 const projectRoot = resolve(process.env.PROJECT_ROOT ?? process.cwd());
 const dist = resolve(projectRoot, process.env.DIST_DIR ?? 'dist');
@@ -19,9 +20,14 @@ const forbiddenClaims = [
   { pattern: /\b(?:stable|steady|constant|locked|guaranteed|guarantees|guaranteeing)\b[^.!?\n]{0,100}\b(?:fps|frame\s*rate|frames?\s+per\s+second)\b/iu, label: 'guaranteed frame-rate claim' },
   { pattern: /\b(?:guaranteed|guarantees|guaranteeing|stable|constant|locked)\b[^.!?\n]{0,120}\b(?:performance|rendering|animation|frame\s*rate|fps)\b[^.!?\n]{0,120}\b(?:on|across|for)\s+(?:all|any|every)\s+(?:device|browser|machine|hardware)s?\b/iu, label: 'all-device performance guarantee' },
   { pattern: /\b(?:all|any|every)\s+(?:device|browser|machine|hardware)s?\b[^.!?\n]{0,120}\b(?:guaranteed|stable|constant|locked)\b[^.!?\n]{0,120}\b(?:performance|rendering|animation|frame\s*rate|fps)\b/iu, label: 'all-device performance guarantee' },
-  { pattern: /(?:^|[^\p{L}\p{N}_])(?:стабильн\w*|гарантированн\w*|гарантир\w*|постоянн\w*|фиксированн\w*)[^.!?\n]{0,100}(?:fps|кадр\w*\s+в\s+секунду|частот\w*\s+кадр\w*)(?=$|[^\p{L}\p{N}_])/iu, label: 'guaranteed Russian frame-rate claim' },
-  { pattern: /(?:^|[^\p{L}\p{N}_])(?:стабильн\w*|гарантированн\w*|гарантир\w*|постоянн\w*|фиксированн\w*)[^.!?\n]{0,120}(?:производительн\w*|рендер\w*|анимац\w*|fps|кадр\w*)[^.!?\n]{0,120}(?:на|для)\s+(?:любом|любого|всех|каждом|каждого)\s+(?:устройств\w*|браузер\w*|оборудован\w*)(?=$|[^\p{L}\p{N}_])/iu, label: 'all-device Russian performance guarantee' },
-  { pattern: /(?:^|[^\p{L}\p{N}_])(?:на|для)\s+(?:любом|любого|всех|каждом|каждого)\s+(?:устройств\w*|браузер\w*|оборудован\w*)[^.!?\n]{0,120}(?:стабильн\w*|гарантированн\w*|гарантир\w*|постоянн\w*|фиксированн\w*)[^.!?\n]{0,120}(?:производительн\w*|рендер\w*|анимац\w*|fps|кадр\w*)(?=$|[^\p{L}\p{N}_])/iu, label: 'all-device Russian performance guarantee' },
+  { pattern: /(?:^|[^\p{L}\p{N}_])(?:стабильн[\p{L}\p{M}]*|гарантированн[\p{L}\p{M}]*|гарантир[\p{L}\p{M}]*|постоянн[\p{L}\p{M}]*|фиксированн[\p{L}\p{M}]*)[^.!?\n]{0,100}(?:fps|кадр[\p{L}\p{M}]*\s+в\s+секунду|частот[\p{L}\p{M}]*\s+кадр[\p{L}\p{M}]*)(?=$|[^\p{L}\p{N}_])/iu, label: 'guaranteed Russian frame-rate claim' },
+  { pattern: /(?:^|[^\p{L}\p{N}_])(?:стабильн[\p{L}\p{M}]*|гарантированн[\p{L}\p{M}]*|гарантир[\p{L}\p{M}]*|постоянн[\p{L}\p{M}]*|фиксированн[\p{L}\p{M}]*)[^.!?\n]{0,120}(?:производительн[\p{L}\p{M}]*|рендер[\p{L}\p{M}]*|анимац[\p{L}\p{M}]*|fps|кадр[\p{L}\p{M}]*)[^.!?\n]{0,120}(?:на|для)\s+(?:любом|любого|всех|каждом|каждого)\s+(?:устройств[\p{L}\p{M}]*|браузер[\p{L}\p{M}]*|оборудован[\p{L}\p{M}]*)(?=$|[^\p{L}\p{N}_])/iu, label: 'all-device Russian performance guarantee' },
+  { pattern: /(?:^|[^\p{L}\p{N}_])(?:на|для)\s+(?:любом|любого|всех|каждом|каждого)\s+(?:устройств[\p{L}\p{M}]*|браузер[\p{L}\p{M}]*|оборудован[\p{L}\p{M}]*)[^.!?\n]{0,120}(?:стабильн[\p{L}\p{M}]*|гарантированн[\p{L}\p{M}]*|гарантир[\p{L}\p{M}]*|постоянн[\p{L}\p{M}]*|фиксированн[\p{L}\p{M}]*)[^.!?\n]{0,120}(?:производительн[\p{L}\p{M}]*|рендер[\p{L}\p{M}]*|анимац[\p{L}\p{M}]*|fps|кадр[\p{L}\p{M}]*)(?=$|[^\p{L}\p{N}_])/iu, label: 'all-device Russian performance guarantee' },
+  { pattern: /\b(?:guaranteed|guarantees|guaranteeing|locked|constant|stable)\b[^.!?]{0,100}\bframe[\s\p{P}_]*rate\b/iu, label: 'guaranteed frame-rate claim' },
+  { pattern: /\b(?:always|guaranteed|flawless(?:ly)?|perfect(?:ly)?|consistently)\s+(?:smooth|lag[\s-]*free|stutter[\s-]*free|drop[\s-]*free)\b[^.!?]{0,140}\b(?:on|across|for)\s+(?:all|any|every)\s+(?:device|browser|machine|hardware)s?\b/iu, label: 'semantic all-device smoothness guarantee' },
+  { pattern: /\b(?:all|any|every)\s+(?:device|browser|machine|hardware)s?\b[^.!?]{0,140}\b(?:always|guaranteed|flawless(?:ly)?|perfect(?:ly)?|consistently)\s+(?:smooth|lag[\s-]*free|stutter[\s-]*free|drop[\s-]*free)\b/iu, label: 'semantic all-device smoothness guarantee' },
+  { pattern: /(?:^|[^\p{L}\p{N}_])(?:всегда\s+плавн[\p{L}\p{M}]*|гарантир[\p{L}\p{M}]*\s+плавн[\p{L}\p{M}]*|гарантир[\p{L}\p{M}]*\s+(?:работ[\p{L}\p{M}]*|анимац[\p{L}\p{M}]*)\s+без\s+просадок|без\s+лагов\s+и\s+просадок)[^.!?]{0,140}(?:на|для)\s+(?:всех|любых|каждом|каждого)\s+(?:устройств[\p{L}\p{M}]*|браузер[\p{L}\p{M}]*|оборудован[\p{L}\p{M}]*)(?=$|[^\p{L}\p{N}_])/iu, label: 'semantic all-device Russian performance guarantee' },
+  { pattern: /(?:^|[^\p{L}\p{N}_])(?:на|для)\s+(?:всех|любых|каждом|каждого)\s+(?:устройств[\p{L}\p{M}]*|браузер[\p{L}\p{M}]*|оборудован[\p{L}\p{M}]*)[^.!?]{0,140}(?:всегда\s+плавн[\p{L}\p{M}]*|гарантир[\p{L}\p{M}]*\s+плавн[\p{L}\p{M}]*|без\s+(?:лагов|просадок))(?=$|[^\p{L}\p{N}_])/iu, label: 'semantic all-device Russian performance guarantee' },
   { pattern: /gh-pages branch/iu, label: 'obsolete gh-pages deployment claim' },
   { pattern: /без перезагрузки страницы/iu, label: 'obsolete in-place localization claim' },
   { pattern: /without a page reload/iu, label: 'obsolete in-place localization claim' },
@@ -58,12 +64,14 @@ async function listFiles(directory, predicate) {
   return files.sort();
 }
 
-function collectViolations(source, label) {
-  const violations = [];
-  for (const claim of forbiddenClaims) {
-    if (claim.pattern.test(source)) violations.push(`${label}: ${claim.label}`);
+function collectViolations(source, label, fileExtension) {
+  const violations = new Set();
+  for (const surface of claimTextSurfaces(source, fileExtension, label)) {
+    for (const claim of forbiddenClaims) {
+      if (claim.pattern.test(surface)) violations.add(`${label}: ${claim.label}`);
+    }
   }
-  return violations;
+  return [...violations];
 }
 
 const sourceFiles = [];
@@ -83,11 +91,11 @@ for (const file of uniqueSourceFiles) {
   } catch (error) {
     throw new Error(`${label}: required public surface is unreadable: ${error instanceof Error ? error.message : String(error)}`);
   }
-  violations.push(...collectViolations(source, label));
+  violations.push(...collectViolations(source, label, extension(file)));
 }
 for (const file of generatedFiles) {
   const label = `generated:${normalizedRelative(dist, file)}`;
-  violations.push(...collectViolations(await readFile(file, 'utf8'), label));
+  violations.push(...collectViolations(await readFile(file, 'utf8'), label, extension(file)));
 }
 
 if (violations.length) {
