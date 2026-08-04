@@ -35,7 +35,7 @@ The product review confirmed and corrected bounded defects without redesigning t
 - touch targets and small-height/hoverless layouts are bounded;
 - WebGL lifecycle owns context loss/restoration, background pauses, adaptive DPR and resource disposal;
 - WebGL-disabled and no-JS states retain the complete primary content path;
-- Vite/esbuild syntax and whitespace remain minified, while platform-dependent identifier renaming is disabled so Windows and Linux emit one exact artifact tree.
+- Vite/esbuild whitespace remains minified, while platform-dependent identifier and syntax rewrites are disabled so Windows and Linux emit one exact artifact tree.
 
 ## Dependency decision
 

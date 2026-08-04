@@ -4,8 +4,10 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   base: process.env.BASE_PATH ?? '/webgl-portfolio/',
   esbuild: {
-    // Identifier renaming is platform-dependent in esbuild; keep syntax and whitespace minification deterministic.
+    // Identifier and syntax rewrites vary between platform binaries; retain deterministic whitespace minification only.
     minifyIdentifiers: false,
+    minifySyntax: false,
+    minifyWhitespace: true,
   },
   build: {
     target: 'es2020',
