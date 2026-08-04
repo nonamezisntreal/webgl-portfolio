@@ -254,11 +254,25 @@ async function pageContract(cdp) {
       headingSkips,
       horizontalOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       canvasHidden: document.getElementById('gl')?.getAttribute('aria-hidden'),
-      englishHref: document.getElementById('lang-toggle')?.getAttribute('href'),
+      russianHref: document.querySelector('[data-lang-link="ru"]')?.getAttribute('href'),
+      englishHref: document.querySelector('[data-lang-link="en"]')?.getAttribute('href'),
+      activeLocale: document.querySelector('.lang-toggle__option.is-active')?.getAttribute('data-lang-pill'),
       contactStatusRole: document.getElementById('contact-sent')?.getAttribute('role'),
       webglFallback: document.documentElement.classList.contains('webgl-fallback'),
     };
   })()`);
+}
+
+async function currentLocaleClickIsPrevented(cdp, locale) {
+  await cdp.evaluate(`(() => {
+    window.__currentLocaleClickPrevented = null;
+    const link = document.querySelector('[data-lang-link="${locale}"]');
+    if (!link) return;
+    link.addEventListener('click', (event) => { window.__currentLocaleClickPrevented = event.defaultPrevented; }, { once: true });
+    link.click();
+  })()`);
+  await sleep(80);
+  return cdp.evaluate('window.__currentLocaleClickPrevented');
 }
 
 async function setViewport(cdp, width, height, mobile = false) {
@@ -279,10 +293,24 @@ async function runPrimary(origin, results) {
     assert(desktop.headingSkips.length === 0, 'Visible heading hierarchy skips levels.');
     assert(desktop.horizontalOverflow <= 1, 'Desktop page has horizontal overflow.');
     assert(desktop.canvasHidden === 'true', 'Decorative canvas is exposed to assistive technology.');
-    assert(desktop.englishHref === `${basePath}en/`, 'No-JS English navigation target is incorrect.');
+    assert(desktop.russianHref === basePath && desktop.englishHref === `${basePath}en/`, 'Homepage localized navigation targets are incorrect.');
+    assert(desktop.activeLocale === 'ru', 'Russian homepage active language state is incorrect.');
+    assert(await currentLocaleClickIsPrevented(cdp, 'ru'), 'Clicking active RU unexpectedly navigates away.');
     assert(desktop.contactStatusRole === 'status', 'Contact feedback is not a live status region.');
     await cdp.screenshot(resolve(artifactDir, 'desktop-1440x900.png'));
     results.push({ id: 'BROWSER-DESKTOP', status: 'PASS', details: desktop });
+
+    await cdp.navigate(`${origin}${basePath}en/`);
+    const english = await pageContract(cdp);
+    assert(english.lang === 'en', 'English homepage language is incorrect.');
+    assert(english.ready && !english.loaderPresent, 'English homepage loader did not settle.');
+    assert(english.mainTextLength > 1000 && english.h1Count === 1, 'English homepage primary content is incomplete.');
+    assert(english.canvasHidden === 'true', 'English homepage is missing the shared WebGL canvas.');
+    assert(english.russianHref === basePath && english.englishHref === `${basePath}en/`, 'English homepage localized navigation targets are incorrect.');
+    assert(english.activeLocale === 'en', 'English homepage active language state is incorrect.');
+    assert(await currentLocaleClickIsPrevented(cdp, 'en'), 'Clicking active EN unexpectedly navigates away.');
+    await cdp.screenshot(resolve(artifactDir, 'english-1440x900.png'));
+    results.push({ id: 'BROWSER-ENGLISH-HOMEPAGE', status: 'PASS', details: english });
 
     for (const viewport of [
       { id: 'BROWSER-TABLET', width: 768, height: 1024, mobile: true, screenshot: 'tablet-768x1024.png' },

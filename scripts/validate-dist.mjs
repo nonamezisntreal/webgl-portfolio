@@ -604,7 +604,7 @@ for (const route of manifest.routes) {
   assert(!/\{\{[^}]+\}\}|__\w+__|TODO_REPLACE/i.test(html), `${route.path}: unresolved marker leaked into generated HTML.`);
   if (route.path !== canonicalBasePath) assert(visibleText(html).includes(expectedCopyright), `${route.path}: copyright year must be derived from the versioned content date.`);
   else assert(html.includes('<span id="year"></span>'), 'Homepage deterministic year target is missing.');
-  if (route.type !== 'home' || route.locale === 'en') validateStaticRuntime(html, route.path);
+  if (route.type !== 'home') validateStaticRuntime(html, route.path);
   await validateInternalAssets(html, route.path, route.path, manifest);
 }
 
@@ -616,10 +616,17 @@ assert(rootHtml.includes('id="explore"'), 'Homepage published-content directory 
 assert(rootHtml.includes('/webgl-portfolio/services/aspnet-core-development/'), 'Homepage does not expose service deep links.');
 assert(rootHtml.includes('/webgl-portfolio/cases/freelancebot/'), 'Homepage does not expose case deep links.');
 assert(rootHtml.includes('/webgl-portfolio/insights/webgl-core-web-vitals/'), 'Homepage does not expose insight deep links.');
-assert(rootHtml.includes('<a class="lang-toggle"'), 'Homepage language switch must be a normal link.');
+assert(rootHtml.includes('<div class="lang-toggle"'), 'Homepage language switch group is missing.');
+assert(rootHtml.includes('data-lang-link="ru"') && rootHtml.includes('data-lang-link="en"'), 'Homepage must expose separate RU and EN links.');
+assert(!rootHtml.includes('<a class="lang-toggle"'), 'Homepage language choices must not share one wrapper link.');
 assert(!rootHtml.includes('<button class="lang-toggle"'), 'Homepage language switch still mutates locale in place.');
 assert(!rootHtml.includes('href="/favicon.svg"'), 'Favicon still uses a domain-root path.');
 assert(!rootHtml.includes('src="/src/main.ts"'), 'Vite source entry leaked into the production artifact.');
+
+const englishHomepage = htmlByPath.get(`${canonicalBasePath}en/`);
+assert(englishHomepage?.includes('<canvas id="gl"'), 'English homepage is missing the shared WebGL canvas.');
+assert(englishHomepage?.includes('data-lang-link="en"'), 'English homepage language controls are missing.');
+assert(englishHomepage?.includes('aria-current="page">EN</a>'), 'English homepage active language state is incorrect.');
 
 for (const route of manifest.routes) {
   const counterpartHtml = htmlByPath.get(route.counterpartPath);
