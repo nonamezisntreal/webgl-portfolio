@@ -103,6 +103,7 @@ initContactForm(() => locale);
 /* WebGL is lazy-loaded so primary HTML paints immediately. */
 const canvas = document.getElementById('gl') as HTMLCanvasElement;
 const fpsLabel = document.getElementById('hero-fps');
+let disposeExperience: (() => void) | undefined;
 
 async function boot(): Promise<void> {
   try {
@@ -114,6 +115,7 @@ async function boot(): Promise<void> {
         if (fpsLabel) fpsLabel.textContent = `${fps} fps`;
       },
     });
+    disposeExperience = () => experience.dispose();
 
     initScroll(reducedMotion, {
       onProgress: (p) => experience.setScroll(p),
@@ -124,6 +126,7 @@ async function boot(): Promise<void> {
     else experience.start();
   } catch (err) {
     console.warn('WebGL experience disabled:', err);
+    document.documentElement.classList.add('webgl-fallback');
     canvas.remove();
     initScroll(reducedMotion, { onProgress: () => {}, onSection: () => {} });
   } finally {
@@ -149,4 +152,5 @@ function hideLoader(): void {
   }, 250);
 }
 
+window.addEventListener('pagehide', () => disposeExperience?.(), { once: true });
 boot();

@@ -4,8 +4,8 @@ import { Particles } from './Particles';
 import { Rings } from './Rings';
 import { PostFX } from './PostFX';
 
-const ACCENT_A = new THREE.Color('#67e8f9'); // cyan
-const ACCENT_B = new THREE.Color('#a78bfa'); // violet
+const ACCENT_A = new THREE.Color('#67e8f9');
+const ACCENT_B = new THREE.Color('#a78bfa');
 
 export interface ExperienceOptions {
   canvas: HTMLCanvasElement;
@@ -13,48 +13,76 @@ export interface ExperienceOptions {
   onFps?: (fps: number) => void;
 }
 
-/**
- * Orchestrates the whole WebGL layer: renderer, camera, scene modules,
- * the render loop, and the mouse / scroll inputs coming from the UI layer.
- *
- * The UI never touches Three.js directly — it only calls
- * `setScroll()` / `setSection()`, keeping the two layers decoupled.
- */
+interface ExtendedNavigator extends Navigator {
+  deviceMemory?: number;
+  connection?: { saveData?: boolean };
+}
+
+/** WebGL scene lifecycle with bounded adaptive quality and graceful recovery. */
 export class Experience {
-  private renderer: THREE.WebGLRenderer;
-  private scene = new THREE.Scene();
-  private camera: THREE.PerspectiveCamera;
-  private clock = new THREE.Clock();
+  private readonly canvas: HTMLCanvasElement;
+  private readonly renderer: THREE.WebGLRenderer;
+  private readonly scene = new THREE.Scene();
+  private readonly camera: THREE.PerspectiveCamera;
+  private readonly clock = new THREE.Clock();
 
-  private core: Core;
-  private particles: Particles;
-  private rings: Rings;
-  private postfx: PostFX;
+  private readonly core: Core;
+  private readonly particles: Particles;
+  private readonly rings: Rings;
+  private readonly postfx: PostFX;
 
-  private mouse = new THREE.Vector2();
-  private smoothMouse = new THREE.Vector2();
+  private readonly mouse = new THREE.Vector2();
+  private readonly smoothMouse = new THREE.Vector2();
+  private readonly sectionOffset = new THREE.Vector3();
+  private readonly targetSectionOffset = new THREE.Vector3();
   private scroll = 0;
-  private sectionOffset = new THREE.Vector3();
-  private targetSectionOffset = new THREE.Vector3();
 
-  private reducedMotion: boolean;
+  private readonly reducedMotion: boolean;
+  private readonly isLowPower: boolean;
+  private readonly onFps?: (fps: number) => void;
+  private requestedRunning = false;
   private running = false;
-  private isLowPower: boolean;
+  private contextLost = false;
+  private disposed = false;
+
   private fpsAccum = 0;
   private fpsFrames = 0;
   private fpsTimer = 0;
-  private onFps?: (fps: number) => void;
+  private slowWindows = 0;
+  private fastWindows = 0;
+  private qualityScale: number;
+
+  private readonly handleResize = () => this.resize();
+  private readonly handlePointerMove = (event: PointerEvent) => this.onPointerMove(event);
+  private readonly handleVisibility = () => {
+    if (document.hidden) this.pauseLoop();
+    else if (this.requestedRunning && !this.reducedMotion) this.resumeLoop();
+  };
+  private readonly handleContextLost = (event: Event) => {
+    event.preventDefault();
+    this.contextLost = true;
+    this.pauseLoop();
+  };
+  private readonly handleContextRestored = () => {
+    this.contextLost = false;
+    this.resize();
+    if (this.reducedMotion) this.renderOnce();
+    else if (this.requestedRunning && !document.hidden) this.resumeLoop();
+  };
 
   constructor({ canvas, reducedMotion, onFps }: ExperienceOptions) {
+    this.canvas = canvas;
     this.reducedMotion = reducedMotion;
     this.onFps = onFps;
-    this.isLowPower = window.matchMedia('(max-width: 768px)').matches;
+    this.isLowPower = this.detectLowPower();
+    this.qualityScale = this.isLowPower ? 0.72 : 1;
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: false, // post chain + bloom makes MSAA unnecessary
+      antialias: false,
       alpha: false,
-      powerPreference: 'high-performance',
+      powerPreference: this.isLowPower ? 'low-power' : 'high-performance',
+      failIfMajorPerformanceCaveat: false,
     });
     this.renderer.setClearColor('#06060b', 1);
 
@@ -62,29 +90,24 @@ export class Experience {
     this.camera.position.set(0, 0, 6.2);
 
     this.core = new Core(ACCENT_A, ACCENT_B);
-    this.particles = new Particles(ACCENT_A, ACCENT_B, this.isLowPower ? 600 : 1600);
+    this.particles = new Particles(ACCENT_A, ACCENT_B, this.isLowPower ? 480 : 1600);
     this.rings = new Rings(ACCENT_A, ACCENT_B);
     this.scene.add(this.core.group, this.particles.group, this.rings.group);
     this.scene.fog = new THREE.FogExp2('#06060b', 0.045);
-
     this.postfx = new PostFX(this.renderer, this.scene, this.camera, this.isLowPower ? 'low' : 'high');
 
     this.resize();
-    window.addEventListener('resize', () => this.resize());
-    window.addEventListener('pointermove', (e) => this.onPointerMove(e), { passive: true });
-    document.addEventListener('visibilitychange', () => {
-      document.hidden ? this.stop() : this.start();
-    });
+    window.addEventListener('resize', this.handleResize, { passive: true });
+    window.addEventListener('pointermove', this.handlePointerMove, { passive: true });
+    document.addEventListener('visibilitychange', this.handleVisibility);
+    canvas.addEventListener('webglcontextlost', this.handleContextLost);
+    canvas.addEventListener('webglcontextrestored', this.handleContextRestored);
   }
 
-  /* ── public API for the UI layer ───────────────────────────── */
-
-  /** Page scroll progress, 0..1 */
   setScroll(progress: number): void {
-    this.scroll = progress;
+    this.scroll = Math.min(1, Math.max(0, progress));
   }
 
-  /** Active section drives a cinematic camera re-framing */
   setSection(name: string): void {
     const offsets: Record<string, [number, number, number]> = {
       hero: [0, 0, 0],
@@ -100,74 +123,149 @@ export class Experience {
   }
 
   start(): void {
-    if (this.running) return;
+    if (this.disposed) return;
+    this.requestedRunning = true;
+    if (this.reducedMotion) {
+      this.renderOnce();
+      return;
+    }
+    this.resumeLoop();
+  }
+
+  stop(): void {
+    this.requestedRunning = false;
+    this.pauseLoop();
+  }
+
+  renderOnce(): void {
+    if (this.disposed || this.contextLost) return;
+    this.core.update(2.5, this.smoothMouse, this.scroll);
+    this.particles.update(2.5, this.scroll);
+    this.rings.update(2.5, this.smoothMouse, this.scroll);
+    this.postfx.render(2.5);
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.requestedRunning = false;
+    this.pauseLoop();
+    window.removeEventListener('resize', this.handleResize);
+    window.removeEventListener('pointermove', this.handlePointerMove);
+    document.removeEventListener('visibilitychange', this.handleVisibility);
+    this.canvas.removeEventListener('webglcontextlost', this.handleContextLost);
+    this.canvas.removeEventListener('webglcontextrestored', this.handleContextRestored);
+
+    this.scene.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      mesh.geometry?.dispose();
+      const materials = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : [];
+      for (const material of materials) this.disposeMaterial(material);
+    });
+    this.postfx.dispose();
+    this.renderer.dispose();
+    this.renderer.forceContextLoss();
+  }
+
+  private detectLowPower(): boolean {
+    const extended = navigator as ExtendedNavigator;
+    return window.matchMedia('(max-width: 768px), (pointer: coarse)').matches
+      || extended.connection?.saveData === true
+      || (extended.deviceMemory !== undefined && extended.deviceMemory <= 4)
+      || navigator.hardwareConcurrency <= 4;
+  }
+
+  private disposeMaterial(material: THREE.Material): void {
+    const values = Object.values(material as unknown as Record<string, unknown>);
+    for (const value of values) if (value instanceof THREE.Texture) value.dispose();
+    material.dispose();
+  }
+
+  private resumeLoop(): void {
+    if (this.running || this.disposed || this.contextLost || document.hidden) return;
     this.running = true;
     this.clock.start();
     this.renderer.setAnimationLoop(() => this.tick());
   }
 
-  stop(): void {
+  private pauseLoop(): void {
+    if (!this.running) return;
     this.running = false;
     this.renderer.setAnimationLoop(null);
+    this.clock.stop();
   }
 
-  /** Render one static frame (reduced-motion fallback). */
-  renderOnce(): void {
-    this.core.update(2.5, this.smoothMouse, 0);
-    this.particles.update(2.5, 0);
-    this.rings.update(2.5, this.smoothMouse, 0);
-    this.postfx.render(2.5);
-  }
-
-  /* ── internals ─────────────────────────────────────────────── */
-
-  private onPointerMove(e: PointerEvent): void {
+  private onPointerMove(event: PointerEvent): void {
     this.mouse.set(
-      (e.clientX / window.innerWidth) * 2 - 1,
-      -(e.clientY / window.innerHeight) * 2 + 1,
+      (event.clientX / window.innerWidth) * 2 - 1,
+      -(event.clientY / window.innerHeight) * 2 + 1,
     );
     if (this.reducedMotion) this.renderOnce();
   }
 
   private resize(): void {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    const dpr = Math.min(window.devicePixelRatio, this.isLowPower ? 1.5 : 2);
-    this.renderer.setSize(w, h, false);
-    this.renderer.setPixelRatio(dpr);
-    this.camera.aspect = w / h;
+    if (this.disposed || this.contextLost) return;
+    const width = Math.max(1, window.innerWidth);
+    const height = Math.max(1, window.innerHeight);
+    const deviceLimit = this.isLowPower ? 1.5 : 2;
+    const pixelRatio = Math.max(0.75, Math.min(window.devicePixelRatio, deviceLimit) * this.qualityScale);
+    this.renderer.setSize(width, height, false);
+    this.renderer.setPixelRatio(pixelRatio);
+    this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.postfx.setSize(w, h, dpr);
+    this.postfx.setSize(width, height, pixelRatio);
     if (this.reducedMotion) this.renderOnce();
   }
 
+  private adaptQuality(fps: number): void {
+    if (this.reducedMotion || this.contextLost) return;
+    if (fps < 35) {
+      this.slowWindows += 1;
+      this.fastWindows = 0;
+    } else if (fps > 54) {
+      this.fastWindows += 1;
+      this.slowWindows = 0;
+    } else {
+      this.slowWindows = 0;
+      this.fastWindows = 0;
+    }
+
+    if (this.slowWindows >= 3 && this.qualityScale > 0.5) {
+      this.qualityScale = Math.max(0.5, this.qualityScale - 0.12);
+      this.slowWindows = 0;
+      this.resize();
+    } else if (this.fastWindows >= 6 && this.qualityScale < 1) {
+      this.qualityScale = Math.min(1, this.qualityScale + 0.08);
+      this.fastWindows = 0;
+      this.resize();
+    }
+  }
+
   private tick(): void {
-    const dt = this.clock.getDelta();
-    const t = this.clock.getElapsedTime();
+    if (this.disposed || this.contextLost) return;
+    const delta = Math.min(this.clock.getDelta(), 0.1);
+    const time = this.clock.getElapsedTime();
 
     this.smoothMouse.lerp(this.mouse, 0.06);
     this.sectionOffset.lerp(this.targetSectionOffset, 0.035);
-
-    // camera: gentle parallax + scroll dolly + section framing
     this.camera.position.x = this.smoothMouse.x * 0.55 + this.sectionOffset.x;
     this.camera.position.y = this.smoothMouse.y * 0.35 + this.sectionOffset.y - this.scroll * 0.4;
     this.camera.position.z = 6.2 + this.sectionOffset.z + this.scroll * 2.4;
     this.camera.lookAt(0, 0, 0);
 
-    // calm the glow down while reading content sections
     this.postfx.setBloomScale(1 - this.scroll * 0.45);
+    this.core.update(time, this.smoothMouse, this.scroll);
+    this.particles.update(time, this.scroll);
+    this.rings.update(time, this.smoothMouse, this.scroll);
+    this.postfx.render(time);
 
-    this.core.update(t, this.smoothMouse, this.scroll);
-    this.particles.update(t, this.scroll);
-    this.rings.update(t, this.smoothMouse, this.scroll);
-    this.postfx.render(t);
-
-    // fps meter (updated ~once per second)
-    this.fpsAccum += dt;
-    this.fpsFrames++;
-    this.fpsTimer += dt;
-    if (this.fpsTimer >= 1 && this.onFps) {
-      this.onFps(Math.round(this.fpsFrames / this.fpsAccum));
+    this.fpsAccum += delta;
+    this.fpsFrames += 1;
+    this.fpsTimer += delta;
+    if (this.fpsTimer >= 1 && this.fpsAccum > 0) {
+      const fps = Math.round(this.fpsFrames / this.fpsAccum);
+      this.onFps?.(fps);
+      this.adaptQuality(fps);
       this.fpsAccum = 0;
       this.fpsFrames = 0;
       this.fpsTimer = 0;

@@ -60,4 +60,8 @@ export class PostFX {
     this.grade.uniforms.uTime.value = time;
     this.composer.render();
   }
+
+  dispose(): void {
+    this.composer.dispose();
+  }
 }
