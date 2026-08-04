@@ -11,7 +11,7 @@ const canonicalBasePath = '/webgl-portfolio/';
 const canonicalHomepage = `${canonicalOrigin}${canonicalBasePath}`;
 const canonicalSitemap = `${canonicalHomepage}sitemap.xml`;
 const allowedExternalAssetOrigins = new Set(['https://fonts.googleapis.com', 'https://fonts.gstatic.com']);
-const requiredFiles = ['index.html', 'robots.txt', 'sitemap.xml', '404.html', 'portfolio-links.json', 'routes-manifest.json'];
+const requiredFiles = ['index.html', 'en/index.html', 'robots.txt', 'sitemap.xml', '404.html', 'portfolio-links.json', 'routes-manifest.json'];
 const textExtensions = new Set(['.css', '.html', '.js', '.json', '.svg', '.txt', '.xml']);
 const analyticsBody = "document.addEventListener('click',function(e){var a=e.target.closest('[data-portfolio-event]');if(!a)return;window.dispatchEvent(new CustomEvent('portfolio:event',{detail:{event:a.dataset.portfolioEvent,pageType:document.body.dataset.pageType,pageId:document.body.dataset.pageId,locale:document.documentElement.lang,href:a.href||null}}));});";
 const expectedIdentity = {
@@ -276,6 +276,66 @@ function validateStaticRuntime(html, label, { requireEventHook = true } = {}) {
     assert(scriptAttribute(script, 'data-portfolio-runtime') === 'events', `${label}: executable script is not the bounded event hook.`);
     assert(script.body === analyticsBody, `${label}: bounded event hook bytes changed unexpectedly.`);
   }
+}
+
+function countValue(source, value) {
+  return source.split(value).length - 1;
+}
+
+function hasAttribute(tag, name) {
+  return new RegExp(`\\s${name}(?:\\s|=|>)`, 'i').test(tag);
+}
+
+function validateInteractiveHomepage(html, route, manifest) {
+  const label = route.path;
+  const htmlTag = tags(html, 'html')[0];
+  const bodyTag = tags(html, 'body')[0];
+  assert(htmlTag && attribute(htmlTag, 'data-locale') === route.locale, `${label}: data-locale must equal ${route.locale}.`);
+  assert(bodyTag && attribute(bodyTag, 'data-interactive-homepage') === 'v1', `${label}: interactive homepage marker is missing.`);
+  assert(countValue(html, 'data-interactive-homepage="v1"') === 1, `${label}: interactive homepage marker must appear exactly once.`);
+  assert(countValue(html, 'data-homepage-assembly="v1"') === 1, `${label}: homepage assembly marker must appear exactly once.`);
+  assert(countValue(html, 'data-homepage-hardening="v1"') === 1, `${label}: homepage hardening marker must appear exactly once.`);
+  assert(countValue(html, 'data-portfolio-runtime="events"') === 1, `${label}: bounded analytics hook must appear exactly once.`);
+
+  const canvases = tags(html, 'canvas').filter((tag) => attribute(tag, 'id') === 'gl');
+  assert(canvases.length === 1, `${label}: expected exactly one shared WebGL canvas.`);
+  const moduleScripts = scriptElements(html).filter((script) => (scriptAttribute(script, 'type') ?? '').toLowerCase() === 'module' && scriptAttribute(script, 'src'));
+  assert(moduleScripts.length === 1, `${label}: expected exactly one application module script.`);
+  const moduleSrc = scriptAttribute(moduleScripts[0], 'src');
+  assert(moduleSrc.startsWith(manifest.basePath) && !moduleSrc.includes('/src/main.ts'), `${label}: application module must reference a built internal asset.`);
+  const stylesheets = tags(html, 'link')
+    .filter((tag) => (attribute(tag, 'rel') ?? '').toLowerCase().split(/\s+/).includes('stylesheet'))
+    .map((tag) => attribute(tag, 'href'))
+    .filter((href) => href?.startsWith(manifest.basePath));
+  assert(stylesheets.length === 1, `${label}: expected exactly one built application stylesheet.`);
+
+  const wrappers = tags(html, 'div').filter((tag) => attribute(tag, 'id') === 'lang-toggle');
+  assert(wrappers.length === 1, `${label}: expected exactly one language switcher wrapper.`);
+  assert(attribute(wrappers[0], 'role') === 'group', `${label}: language switcher wrapper must use role=group.`);
+  assert(attribute(wrappers[0], 'href') === null, `${label}: language switcher wrapper must not have href.`);
+
+  const options = [...html.matchAll(/<(a|span)\b[^>]*\bdata-lang-pill=["'](ru|en)["'][^>]*>/gi)].map((match) => ({
+    tagName: match[1].toLowerCase(),
+    locale: match[2].toLowerCase(),
+    tag: match[0],
+  }));
+  assert(options.length === 2 && new Set(options.map((option) => option.locale)).size === 2, `${label}: language switcher must expose exactly RU and EN options.`);
+  const active = options.filter((option) => attribute(option.tag, 'aria-current') === 'page');
+  assert(active.length === 1, `${label}: language switcher must have exactly one active locale.`);
+  assert(active[0].locale === route.locale, `${label}: active locale does not match the route locale.`);
+  assert(active[0].tagName === 'span' && attribute(active[0].tag, 'href') === null && attribute(active[0].tag, 'tabindex') === null, `${label}: active locale must be an inert span outside the tab order.`);
+  assert(!hasAttribute(active[0].tag, 'data-lang-link'), `${label}: active locale must not be marked as a language link.`);
+
+  const inactive = options.find((option) => option !== active[0]);
+  const expectedLocale = route.locale === 'ru' ? 'en' : 'ru';
+  assert(inactive && inactive.locale === expectedLocale && inactive.tagName === 'a', `${label}: inactive locale must be the counterpart anchor.`);
+  assert(hasAttribute(inactive.tag, 'data-lang-link'), `${label}: inactive locale anchor is missing data-lang-link.`);
+  assert(attribute(inactive.tag, 'href') === route.counterpartPath, `${label}: inactive locale href must equal ${route.counterpartPath}.`);
+  assert(attribute(inactive.tag, 'hreflang') === expectedLocale, `${label}: inactive locale hreflang must equal ${expectedLocale}.`);
+
+  assert(html.includes('id="explore"'), `${label}: localized published-content directory is missing.`);
+  assert(html.includes(`${route.path}services/`) && html.includes(`${route.path}cases/`) && html.includes(`${route.path}insights/`), `${label}: localized published-content directory is incomplete.`);
+  return { moduleSrc, stylesheetHref: stylesheets[0] };
 }
 
 function ids(source) {
@@ -571,6 +631,7 @@ validateRobots(robots);
 const titles = new Map();
 const descriptions = new Map();
 const htmlByPath = new Map();
+const homepageRuntimeRefs = new Map();
 for (const route of manifest.routes) {
   const file = routeFile(manifest.basePath, route.path);
   await access(file, constants.R_OK);
@@ -604,22 +665,34 @@ for (const route of manifest.routes) {
   assert(!/\{\{[^}]+\}\}|__\w+__|TODO_REPLACE/i.test(html), `${route.path}: unresolved marker leaked into generated HTML.`);
   if (route.path !== canonicalBasePath) assert(visibleText(html).includes(expectedCopyright), `${route.path}: copyright year must be derived from the versioned content date.`);
   else assert(html.includes('<span id="year"></span>'), 'Homepage deterministic year target is missing.');
-  if (route.type !== 'home' || route.locale === 'en') validateStaticRuntime(html, route.path);
-  await validateInternalAssets(html, route.path, route.path, manifest);
+  if (route.type === 'home') {
+    await validateInternalAssets(html, route.path, route.path, manifest);
+    homepageRuntimeRefs.set(route.locale, validateInteractiveHomepage(html, route, manifest));
+  } else {
+    validateStaticRuntime(html, route.path);
+    await validateInternalAssets(html, route.path, route.path, manifest);
+  }
 }
 
 const rootRoute = routeIndex.get(canonicalBasePath);
-assert(rootRoute, 'Russian homepage route is missing.');
+const englishRoute = routeIndex.get(`${canonicalBasePath}en/`);
+assert(rootRoute?.type === 'home' && rootRoute.locale === 'ru', 'Russian homepage route is missing.');
+assert(englishRoute?.type === 'home' && englishRoute.locale === 'en', 'English homepage route is missing.');
 validateCanonical(rootHtml, canonicalHomepage, 'Homepage');
 assert(rootHtml.includes('id="projects"'), 'Homepage projects target is missing.');
-assert(rootHtml.includes('id="explore"'), 'Homepage published-content directory is missing.');
+assert(rootHtml.includes('доступен для проектов'), 'Russian homepage primary shell is not localized.');
 assert(rootHtml.includes('/webgl-portfolio/services/aspnet-core-development/'), 'Homepage does not expose service deep links.');
 assert(rootHtml.includes('/webgl-portfolio/cases/freelancebot/'), 'Homepage does not expose case deep links.');
 assert(rootHtml.includes('/webgl-portfolio/insights/webgl-core-web-vitals/'), 'Homepage does not expose insight deep links.');
-assert(rootHtml.includes('<a class="lang-toggle"'), 'Homepage language switch must be a normal link.');
-assert(!rootHtml.includes('<button class="lang-toggle"'), 'Homepage language switch still mutates locale in place.');
 assert(!rootHtml.includes('href="/favicon.svg"'), 'Favicon still uses a domain-root path.');
 assert(!rootHtml.includes('src="/src/main.ts"'), 'Vite source entry leaked into the production artifact.');
+
+const englishHomepage = htmlByPath.get(englishRoute.path);
+assert(englishHomepage?.includes('available for projects'), 'English homepage primary shell is not localized before JavaScript.');
+assert(englishHomepage?.includes('Language selection') && englishHomepage.includes('Primary navigation') && englishHomepage.includes('Close project details'), 'English homepage accessible labels are not localized.');
+assert(homepageRuntimeRefs.size === 2, 'Both interactive homepages must expose a validated runtime contract.');
+assert(homepageRuntimeRefs.get('ru')?.moduleSrc === homepageRuntimeRefs.get('en')?.moduleSrc, 'RU and EN homepages must share the same application module.');
+assert(homepageRuntimeRefs.get('ru')?.stylesheetHref === homepageRuntimeRefs.get('en')?.stylesheetHref, 'RU and EN homepages must share the same application stylesheet.');
 
 for (const route of manifest.routes) {
   const counterpartHtml = htmlByPath.get(route.counterpartPath);

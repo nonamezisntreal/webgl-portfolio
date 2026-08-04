@@ -93,6 +93,7 @@ class Cdp {
     this.nextId = 1;
     this.pending = new Map();
     this.waiters = new Map();
+    this.listeners = new Map();
     socket.addEventListener('message', (event) => {
       const message = JSON.parse(String(event.data));
       if (message.id) {
@@ -103,9 +104,11 @@ class Cdp {
         else pending.resolve(message.result ?? {});
         return;
       }
+      const params = message.params ?? {};
       const waiters = this.waiters.get(message.method) ?? [];
       this.waiters.delete(message.method);
-      for (const waiter of waiters) waiter.resolve(message.params ?? {});
+      for (const waiter of waiters) waiter.resolve(params);
+      for (const listener of this.listeners.get(message.method) ?? []) listener(params);
     });
   }
 
@@ -135,6 +138,13 @@ class Cdp {
     });
   }
 
+  on(method, listener) {
+    const current = this.listeners.get(method) ?? [];
+    current.push(listener);
+    this.listeners.set(method, current);
+    return () => this.listeners.set(method, (this.listeners.get(method) ?? []).filter((item) => item !== listener));
+  }
+
   async evaluate(expression) {
     const result = await this.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
     if (result.exceptionDetails) throw new Error(result.exceptionDetails.text ?? 'Browser evaluation failed.');
@@ -145,6 +155,13 @@ class Cdp {
     const loaded = this.event('Page.loadEventFired');
     const result = await this.send('Page.navigate', { url });
     assert(!result.errorText, `Navigation failed: ${result.errorText}`);
+    await loaded;
+    await sleep(1600);
+  }
+
+  async reload(ignoreCache = true) {
+    const loaded = this.event('Page.loadEventFired');
+    await this.send('Page.reload', { ignoreCache });
     await loaded;
     await sleep(1600);
   }
@@ -212,6 +229,8 @@ async function launchChrome(extraFlags = []) {
   await cdp.send('Runtime.enable');
   await cdp.send('DOM.enable');
   await cdp.send('Log.enable');
+  await cdp.send('Network.enable');
+  await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
   return {
     cdp,
     browserVersion: version.Browser,
@@ -241,6 +260,10 @@ async function pageContract(cdp) {
     const imagesWithoutAlt = [...document.images].filter((image) => !image.hasAttribute('alt')).map((image) => image.src);
     const headingLevels = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(visible).map((heading) => Number(heading.tagName.slice(1)));
     const headingSkips = headingLevels.slice(1).filter((level, index) => level - headingLevels[index] > 1);
+    const wrapper = document.getElementById('lang-toggle');
+    const active = document.querySelector('[data-lang-pill][aria-current="page"]');
+    const inactive = document.querySelector('[data-lang-link]');
+    const inactiveRect = inactive?.getBoundingClientRect();
     return {
       title: document.title,
       lang: document.documentElement.lang,
@@ -253,21 +276,69 @@ async function pageContract(cdp) {
       imagesWithoutAlt,
       headingSkips,
       horizontalOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      canvasExists: Boolean(document.getElementById('gl')),
       canvasHidden: document.getElementById('gl')?.getAttribute('aria-hidden'),
-      englishHref: document.getElementById('lang-toggle')?.getAttribute('href'),
+      wrapperRole: wrapper?.getAttribute('role'),
+      wrapperHref: wrapper?.getAttribute('href'),
+      activeLocale: active?.getAttribute('data-lang-pill'),
+      activeTag: active?.tagName.toLowerCase(),
+      activeHref: active?.getAttribute('href'),
+      activeTabIndex: active?.getAttribute('tabindex'),
+      activeAriaCurrent: active?.getAttribute('aria-current'),
+      inactiveLocale: inactive?.getAttribute('data-lang-pill'),
+      inactiveTag: inactive?.tagName.toLowerCase(),
+      inactiveHref: inactive?.getAttribute('href'),
+      inactiveHreflang: inactive?.getAttribute('hreflang'),
+      inactiveTarget: inactiveRect ? { width: inactiveRect.width, height: inactiveRect.height } : null,
+      moduleCount: document.querySelectorAll('script[type="module"][src]').length,
+      heroEyebrow: document.getElementById('hero-eyebrow')?.textContent?.trim(),
+      navigationLabel: document.querySelector('.header__nav')?.getAttribute('aria-label'),
+      closeLabel: document.getElementById('case-close')?.getAttribute('aria-label'),
       contactStatusRole: document.getElementById('contact-sent')?.getAttribute('role'),
       webglFallback: document.documentElement.classList.contains('webgl-fallback'),
     };
   })()`);
 }
 
+async function activeLocaleClickKeepsPath(cdp) {
+  const before = await cdp.evaluate('location.pathname');
+  await cdp.evaluate(`document.querySelector('[data-lang-pill][aria-current="page"]')?.click()`);
+  await sleep(120);
+  const after = await cdp.evaluate('location.pathname');
+  return { before, after };
+}
+
 async function setViewport(cdp, width, height, mobile = false) {
   await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: mobile ? 2 : 1, mobile });
+}
+
+function collectDiagnostics(cdp, origin) {
+  const consoleErrors = [];
+  const networkFailures = [];
+  cdp.on('Runtime.exceptionThrown', ({ exceptionDetails }) => consoleErrors.push(exceptionDetails?.text ?? 'Runtime exception'));
+  cdp.on('Log.entryAdded', ({ entry }) => {
+    if (entry?.level === 'error') consoleErrors.push(entry.text ?? 'Console error');
+  });
+  cdp.on('Network.loadingFailed', ({ requestId, errorText, canceled }) => {
+    if (!canceled) networkFailures.push({ requestId, errorText });
+  });
+  cdp.on('Network.responseReceived', ({ response }) => {
+    if (response?.url?.startsWith(origin) && response.status >= 400) networkFailures.push({ url: response.url, status: response.status });
+  });
+  return {
+    snapshotAndReset() {
+      const snapshot = { consoleErrors: [...consoleErrors], networkFailures: [...networkFailures] };
+      consoleErrors.length = 0;
+      networkFailures.length = 0;
+      return snapshot;
+    },
+  };
 }
 
 async function runPrimary(origin, results) {
   const browser = await launchChrome();
   const { cdp } = browser;
+  const diagnostics = collectDiagnostics(cdp, origin);
   try {
     await setViewport(cdp, 1440, 900);
     await cdp.navigate(`${origin}${basePath}`);
@@ -278,11 +349,55 @@ async function runPrimary(origin, results) {
     assert(desktop.nameless.length === 0 && desktop.imagesWithoutAlt.length === 0, 'Visible controls or images lack accessible names.');
     assert(desktop.headingSkips.length === 0, 'Visible heading hierarchy skips levels.');
     assert(desktop.horizontalOverflow <= 1, 'Desktop page has horizontal overflow.');
-    assert(desktop.canvasHidden === 'true', 'Decorative canvas is exposed to assistive technology.');
-    assert(desktop.englishHref === `${basePath}en/`, 'No-JS English navigation target is incorrect.');
+    assert(desktop.canvasExists && desktop.canvasHidden === 'true' && desktop.moduleCount === 1, 'Russian homepage shared application runtime is incomplete.');
+    assert(desktop.heroEyebrow === 'доступен для проектов', 'Russian homepage primary shell is not localized.');
+    assert(desktop.wrapperRole === 'group' && desktop.wrapperHref === null, 'Russian language switcher wrapper is not semantic.');
+    assert(desktop.activeLocale === 'ru' && desktop.activeTag === 'span' && desktop.activeHref === null && desktop.activeTabIndex === null && desktop.activeAriaCurrent === 'page', 'Russian homepage active locale must be an inert span.');
+    assert(desktop.inactiveLocale === 'en' && desktop.inactiveTag === 'a' && desktop.inactiveHref === `${basePath}en/` && desktop.inactiveHreflang === 'en', 'Russian homepage inactive EN link is incorrect.');
+    const activeRuClick = await activeLocaleClickKeepsPath(cdp);
+    assert(activeRuClick.before === basePath && activeRuClick.after === basePath, 'Clicking active RU unexpectedly changed the URL.');
     assert(desktop.contactStatusRole === 'status', 'Contact feedback is not a live status region.');
+    const ruDiagnostics = diagnostics.snapshotAndReset();
+    assert(ruDiagnostics.consoleErrors.length === 0 && ruDiagnostics.networkFailures.length === 0, 'Russian direct load produced Console or Network failures.');
     await cdp.screenshot(resolve(artifactDir, 'desktop-1440x900.png'));
-    results.push({ id: 'BROWSER-DESKTOP', status: 'PASS', details: desktop });
+    results.push({ id: 'BROWSER-DESKTOP', status: 'PASS', details: { ...desktop, diagnostics: ruDiagnostics } });
+
+    await cdp.navigate(`${origin}${basePath}en/`);
+    const english = await pageContract(cdp);
+    assert(english.lang === 'en', 'English homepage language is incorrect.');
+    assert(english.ready && !english.loaderPresent, 'English homepage loader did not settle.');
+    assert(english.mainTextLength > 1000 && english.h1Count === 1, 'English homepage primary content is incomplete.');
+    assert(english.canvasExists && english.canvasHidden === 'true' && english.moduleCount === 1, 'English homepage is missing the shared application runtime.');
+    assert(english.heroEyebrow === 'available for projects' && english.navigationLabel === 'Primary navigation' && english.closeLabel === 'Close project details', 'English homepage primary shell or accessible labels are not localized.');
+    assert(english.wrapperRole === 'group' && english.wrapperHref === null, 'English language switcher wrapper is not semantic.');
+    assert(english.activeLocale === 'en' && english.activeTag === 'span' && english.activeHref === null && english.activeTabIndex === null && english.activeAriaCurrent === 'page', 'English homepage active locale must be an inert span.');
+    assert(english.inactiveLocale === 'ru' && english.inactiveTag === 'a' && english.inactiveHref === basePath && english.inactiveHreflang === 'ru', 'English homepage inactive RU link is incorrect.');
+    const activeEnClick = await activeLocaleClickKeepsPath(cdp);
+    assert(activeEnClick.before === `${basePath}en/` && activeEnClick.after === `${basePath}en/`, 'Clicking active EN unexpectedly changed the URL.');
+    const enDiagnostics = diagnostics.snapshotAndReset();
+    assert(enDiagnostics.consoleErrors.length === 0 && enDiagnostics.networkFailures.length === 0, 'English direct load produced Console or Network failures.');
+    await cdp.screenshot(resolve(artifactDir, 'english-1440x900.png'));
+    results.push({ id: 'BROWSER-ENGLISH-HOMEPAGE', status: 'PASS', details: { ...english, diagnostics: enDiagnostics } });
+
+    await cdp.reload(true);
+    const englishReload = await pageContract(cdp);
+    const reloadDiagnostics = diagnostics.snapshotAndReset();
+    assert(englishReload.lang === 'en' && englishReload.ready && englishReload.canvasExists && englishReload.activeLocale === 'en', 'English hard reload did not preserve the interactive locale contract.');
+    assert(reloadDiagnostics.consoleErrors.length === 0 && reloadDiagnostics.networkFailures.length === 0, 'English hard reload produced Console or Network failures.');
+    results.push({ id: 'BROWSER-ENGLISH-HARD-RELOAD', status: 'PASS', details: { ...englishReload, diagnostics: reloadDiagnostics } });
+
+    await setViewport(cdp, 1728, 864);
+    await cdp.navigate(`${origin}${basePath}`);
+    await cdp.screenshot(resolve(artifactDir, 'hero-1728x864-1s.png'));
+    await sleep(3400);
+    await cdp.screenshot(resolve(artifactDir, 'hero-1728x864-5s.png'));
+    await sleep(5000);
+    await cdp.screenshot(resolve(artifactDir, 'hero-1728x864-10s.png'));
+    const timelineContract = await pageContract(cdp);
+    const timelineDiagnostics = diagnostics.snapshotAndReset();
+    assert(timelineContract.ready && timelineContract.canvasExists && timelineContract.horizontalOverflow <= 1, '1728×864 hero timeline did not remain stable.');
+    assert(timelineDiagnostics.consoleErrors.length === 0 && timelineDiagnostics.networkFailures.length === 0, 'Hero timeline produced Console or Network failures.');
+    results.push({ id: 'BROWSER-HERO-TIMELINE', status: 'PASS', details: { ...timelineContract, diagnostics: timelineDiagnostics, captures: ['hero-1728x864-1s.png', 'hero-1728x864-5s.png', 'hero-1728x864-10s.png'] } });
 
     for (const viewport of [
       { id: 'BROWSER-TABLET', width: 768, height: 1024, mobile: true, screenshot: 'tablet-768x1024.png' },
@@ -292,12 +407,11 @@ async function runPrimary(origin, results) {
       await setViewport(cdp, viewport.width, viewport.height, viewport.mobile);
       await cdp.navigate(`${origin}${basePath}`);
       const contract = await pageContract(cdp);
-      const languageTarget = await cdp.evaluate(`(() => { const r=document.getElementById('lang-toggle')?.getBoundingClientRect(); return r ? {width:r.width,height:r.height}:null; })()`);
       assert(contract.horizontalOverflow <= 1, `${viewport.id} has horizontal overflow.`);
       assert(contract.ready && contract.mainTextLength > 1000, `${viewport.id} did not render primary content.`);
-      assert(languageTarget && languageTarget.height >= 44, `${viewport.id} language target is below 44px.`);
+      assert(contract.inactiveTarget && contract.inactiveTarget.width >= 44 && contract.inactiveTarget.height >= 44, `${viewport.id} inactive locale touch target is below 44×44px.`);
       await cdp.screenshot(resolve(artifactDir, viewport.screenshot));
-      results.push({ id: viewport.id, status: 'PASS', details: { ...contract, languageTarget } });
+      results.push({ id: viewport.id, status: 'PASS', details: contract });
     }
 
     await setViewport(cdp, 1440, 900);
@@ -365,12 +479,28 @@ async function runPrimary(origin, results) {
     results.push({ id: 'BROWSER-404', status: 'PASS', details: notFound });
 
     await cdp.navigate(`${origin}${basePath}`);
+    await cdp.evaluate(`document.querySelector('[data-lang-link]')?.focus()`);
+    await cdp.key('Enter', 'Enter');
+    await sleep(1800);
+    const keyboardEnglish = await pageContract(cdp);
+    assert(await cdp.evaluate('location.pathname') === `${basePath}en/` && keyboardEnglish.lang === 'en' && keyboardEnglish.activeLocale === 'en', 'Keyboard activation of EN did not open the English interactive homepage.');
+    await cdp.evaluate(`document.querySelector('[data-lang-link]')?.focus()`);
+    await cdp.key('Enter', 'Enter');
+    await sleep(1800);
+    const keyboardRussian = await pageContract(cdp);
+    assert(await cdp.evaluate('location.pathname') === basePath && keyboardRussian.lang === 'ru' && keyboardRussian.activeLocale === 'ru', 'Keyboard activation of RU did not open the Russian interactive homepage.');
+    results.push({ id: 'BROWSER-KEYBOARD-LOCALE-NAVIGATION', status: 'PASS', details: { keyboardEnglish, keyboardRussian } });
+
+    await cdp.navigate(`${origin}${basePath}`);
     await cdp.navigate(`${origin}${basePath}en/`);
     await cdp.evaluate('history.back()');
-    await sleep(800);
-    const historyPath = await cdp.evaluate('location.pathname');
-    assert(historyPath === basePath, 'Back navigation did not restore the homepage path.');
-    results.push({ id: 'BROWSER-HISTORY', status: 'PASS', details: { historyPath } });
+    await sleep(1000);
+    const backPath = await cdp.evaluate('location.pathname');
+    await cdp.evaluate('history.forward()');
+    await sleep(1000);
+    const forwardPath = await cdp.evaluate('location.pathname');
+    assert(backPath === basePath && forwardPath === `${basePath}en/`, 'Back/Forward navigation did not preserve localized physical routes.');
+    results.push({ id: 'BROWSER-HISTORY', status: 'PASS', details: { backPath, forwardPath } });
   } finally {
     await browser.close();
   }
@@ -411,6 +541,21 @@ async function runNoJs(origin, results) {
     assert(noJs.langRu && noJs.hasH1 && noJs.hasMain && noJs.englishHref && noJs.loaderNonBlockingCss, 'Homepage no-JS fallback contract failed.');
     await browser.cdp.screenshot(resolve(artifactDir, 'no-js-homepage.png'));
 
+    await browser.cdp.navigate(`${origin}${basePath}en/`);
+    const englishHomeHtml = await domHtml(browser.cdp);
+    const englishNoJs = {
+      langEn: /<html\b[^>]*\blang=["']en["'][^>]*\bdata-locale=["']en["']/iu.test(englishHomeHtml),
+      hasH1: /<h1\b/iu.test(englishHomeHtml),
+      hasCanvas: /<canvas\b[^>]*\bid=["']gl["']/iu.test(englishHomeHtml),
+      hasModule: /<script\b[^>]*\btype=["']module["'][^>]*\bsrc=/iu.test(englishHomeHtml),
+      localizedShell: englishHomeHtml.includes('available for projects') && englishHomeHtml.includes('Language selection'),
+      activeEnInert: /<span\b[^>]*data-lang-pill=["']en["'][^>]*aria-current=["']page["'][^>]*>EN<\/span>/iu.test(englishHomeHtml),
+      russianHref: englishHomeHtml.includes(`href="${basePath}"`),
+      loaderNonBlockingCss: englishHomeHtml.includes('pointer-events:none'),
+    };
+    assert(Object.values(englishNoJs).every(Boolean), 'English homepage no-JS localized shell contract failed.');
+    await browser.cdp.screenshot(resolve(artifactDir, 'no-js-english-homepage.png'));
+
     await browser.cdp.navigate(`${origin}${basePath}en/services/webgl-interfaces/`);
     const deepHtml = await domHtml(browser.cdp);
     const deepNoJs = {
@@ -420,14 +565,16 @@ async function runNoJs(origin, results) {
       hasSourceEntry: /\/src\/main\.ts/iu.test(deepHtml),
     };
     assert(deepNoJs.langEn && deepNoJs.hasH1 && deepNoJs.hasMain && !deepNoJs.hasSourceEntry, 'Static deep route fails without JavaScript.');
-    results.push({ id: 'BROWSER-NO-JS', status: 'PASS', details: { root: noJs, deep: deepNoJs } });
+    results.push({ id: 'BROWSER-NO-JS', status: 'PASS', details: { root: noJs, englishHome: englishNoJs, deep: deepNoJs } });
   } finally {
     await browser.close();
   }
 }
 
 await mkdir(artifactDir, { recursive: true });
-const { server, origin } = await startSiteServer();
+const configuredOrigin = process.env.BROWSER_BASE_ORIGIN?.replace(/\/$/u, '');
+const localSite = configuredOrigin ? null : await startSiteServer();
+const origin = configuredOrigin ?? localSite.origin;
 const results = [];
 let failure;
 try {
@@ -438,12 +585,12 @@ try {
   failure = error instanceof Error ? error.stack ?? error.message : String(error);
   results.push({ id: 'BROWSER-HARNESS', status: 'FAIL', details: failure });
 } finally {
-  await new Promise((resolvePromise) => server.close(resolvePromise));
+  if (localSite) await new Promise((resolvePromise) => localSite.server.close(resolvePromise));
 }
 
 const report = {
   schemaVersion: 1,
-  subject: 'WEBGL-PORTFOLIO-REMEDIATION-03-BROWSER-SMOKE',
+  subject: 'WEBGL-PORTFOLIO-INTERACTIVE-EN-AND-HERO-ARTIFACT-REMEDIATION-08-BROWSER-SMOKE',
   chromePath,
   origin,
   artifactDir,
