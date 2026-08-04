@@ -102,6 +102,14 @@ try {
   for (const key of ['repository', 'branch', 'commit', 'parent', 'tree']) assert(metadata[key] === manifest.binding[key], `Evidence metadata ${key} mismatch.`);
   assert(metadata.status === 'READY_FOR_INDEPENDENT_REVIEW', 'Evidence status is not review-gated.');
 
+  const verificationResult = parseJsonStrict(await readFile(resolve(evidenceRoot, 'verification-result.json'), 'utf8'), 'verification-result.json');
+  assertExactKeys(verificationResult, ['schemaVersion', 'campaignId', 'verifier', 'binding', 'status'], 'verification result');
+  assert(verificationResult.schemaVersion === 1 && verificationResult.campaignId === manifest.campaignId, 'Verification result schema/campaign mismatch.');
+  assert(verificationResult.verifier === 'verify-remediation-03-evidence.mjs', 'Verification result verifier identity mismatch.');
+  assertExactKeys(verificationResult.binding, ['repository', 'branch', 'commit', 'parent', 'tree'], 'verification result binding');
+  for (const key of ['repository', 'branch', 'commit', 'parent', 'tree']) assert(verificationResult.binding[key] === manifest.binding[key], `Verification result binding mismatch for ${key}.`);
+  assert(verificationResult.status === 'PASS', 'Verification result status is not PASS.');
+
   const bundle = resolve(evidenceRoot, 'subject.bundle');
   git(['bundle', 'verify', bundle]);
   const heads = git(['bundle', 'list-heads', bundle]);

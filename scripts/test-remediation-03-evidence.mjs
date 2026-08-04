@@ -80,7 +80,7 @@ await test('EV-R03-BACKSLASH-PATH', 'replace one manifest path with a backslash 
   });
 });
 
-await test('EV-R03-WRONG-COMMIT', 'change declared commit in both metadata and manifest and rehash package metadata', 'subject.bundle does not advertise', async (root) => {
+await test('EV-R03-WRONG-COMMIT', 'change declared commit in metadata and manifest while retaining the sealed verification receipt', 'verification result binding mismatch', async (root) => {
   const metadataPath = resolve(root, 'metadata.json');
   const metadata = JSON.parse(await readFile(metadataPath, 'utf8'));
   metadata.commit = '0000000000000000000000000000000000000000';

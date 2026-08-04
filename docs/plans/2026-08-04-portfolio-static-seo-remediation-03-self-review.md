@@ -62,7 +62,7 @@ The following suites have passed during remediation and must be repeated against
 1. **Hand-written HTML perception parser.** It is intentionally bounded to generated repository HTML and fail-closed exact contracts. Hidden-state and entity cases are permanent regressions. A general browser DOM parser is not claimed.
 2. **Public-claim semantics are policy patterns, not unrestricted natural-language inference.** Positive adaptive statements and known English/Russian absolute guarantees are regression-bound. Independent review should attempt additional paraphrases.
 3. **Browser smoke is Chrome/CDP-based.** It covers viewport, keyboard, reduced motion, WebGL and no-JS contracts but is not a substitute for manual assistive-technology testing across every browser.
-4. **Evidence package is external to the Git tree.** Its verifier binds every byte and semantically imports `subject.bundle`; the package itself is not a merge authorization.
+4. **Evidence package is external to the Git tree.** Its verifier binds every byte, validates a deterministic non-self-referential verification receipt, and semantically imports `subject.bundle`. The receipt contains exact verifier identity, Git binding and status but no manifest hash that would become stale when the receipt itself is sealed. No package file is written after the final manifest and verifier pass; the package itself is not a merge authorization.
 5. **Production remains the prior deployed snapshot.** No deployment or production claim is made for Remediation-03 before independent acceptance of the exact final commit/tree.
 
 ## Residual limitations

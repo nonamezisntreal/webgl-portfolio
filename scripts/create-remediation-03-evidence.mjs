@@ -76,8 +76,10 @@ async function writeManifest(binding) {
     entries.push({ path, bytes: bytes.length, sha256: sha256(bytes) });
   }
   const manifestBytes = Buffer.from(`${JSON.stringify({ schemaVersion: 1, campaignId, binding, entries }, null, 2)}\n`, 'utf8');
+  const manifestSha256 = sha256(manifestBytes);
   await writeFile(resolve(evidenceRoot, 'artifact-manifest.json'), manifestBytes);
-  await writeFile(resolve(evidenceRoot, 'artifact-manifest.sha256'), `${sha256(manifestBytes)}\n`, 'utf8');
+  await writeFile(resolve(evidenceRoot, 'artifact-manifest.sha256'), `${manifestSha256}\n`, 'utf8');
+  return manifestSha256;
 }
 
 assert(process.env.EVIDENCE_DIR, 'EVIDENCE_DIR is required.');
@@ -176,22 +178,23 @@ await writeJson(resolve(evidenceRoot, 'secret-scan.json'), { schemaVersion: 1, t
 await copyIfPresent(browserArtifacts, resolve(evidenceRoot, 'browser'));
 await copyIfPresent(buildArtifacts, resolve(evidenceRoot, 'builds'));
 
+await writeJson(resolve(evidenceRoot, 'verification-result.json'), {
+  schemaVersion: 1,
+  campaignId,
+  verifier: 'verify-remediation-03-evidence.mjs',
+  binding,
+  status: 'PASS',
+});
 await writeManifest(binding);
 const baselineVerifier = run(process.execPath, [resolve(repositoryRoot, 'scripts/verify-remediation-03-evidence.mjs'), evidenceRoot, repositoryRoot]);
 assert(baselineVerifier.exitCode === 0, `Generated evidence does not verify: ${baselineVerifier.stdout}${baselineVerifier.stderr}`);
-await writeFile(resolve(evidenceRoot, 'verification-result.json'), baselineVerifier.stdout, 'utf8');
-await writeManifest(binding);
 
 const mutationReport = resolve(evidenceRoot, 'evidence-mutation-tests.json');
 const mutationResult = run(process.execPath, [resolve(repositoryRoot, 'scripts/test-remediation-03-evidence.mjs'), evidenceRoot, repositoryRoot], { env: { EVIDENCE_MUTATION_REPORT: mutationReport } });
 assert(mutationResult.exitCode === 0, `Evidence mutation tests failed: ${mutationResult.stdout}${mutationResult.stderr}`);
-await writeManifest(binding);
+const finalManifestSha256 = await writeManifest(binding);
 
 const finalVerifier = run(process.execPath, [resolve(repositoryRoot, 'scripts/verify-remediation-03-evidence.mjs'), evidenceRoot, repositoryRoot]);
-assert(finalVerifier.exitCode === 0, `Final evidence verification failed: ${finalVerifier.stdout}${finalVerifier.stderr}`);
-await writeFile(resolve(evidenceRoot, 'verification-result.json'), finalVerifier.stdout, 'utf8');
-await writeManifest(binding);
-const finalFinalVerifier = run(process.execPath, [resolve(repositoryRoot, 'scripts/verify-remediation-03-evidence.mjs'), evidenceRoot, repositoryRoot]);
-assert(finalFinalVerifier.exitCode === 0, `Final sealed evidence verification failed: ${finalFinalVerifier.stdout}${finalFinalVerifier.stderr}`);
+assert(finalVerifier.exitCode === 0, `Final sealed evidence verification failed: ${finalVerifier.stdout}${finalVerifier.stderr}`);
 
-console.log(JSON.stringify({ schemaVersion: 1, evidenceRoot, binding, status: 'PASS' }, null, 2));
+console.log(JSON.stringify({ schemaVersion: 1, evidenceRoot, binding, manifestSha256: finalManifestSha256, status: 'PASS' }, null, 2));

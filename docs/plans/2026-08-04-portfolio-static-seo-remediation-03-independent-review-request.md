@@ -33,7 +33,9 @@ node verify-remediation-03-evidence.mjs <EVIDENCE_ROOT> <REPOSITORY_ROOT>
 4. Independently run `git bundle verify`, import `subject.bundle` into a new empty bare repository and recompute commit, parent and tree.
 5. Confirm that no package path uses backslashes, traversal, non-NFC spelling, duplicate raw names or case-insensitive collisions.
 6. Confirm every declared byte length and SHA-256 without relying only on the included verifier.
-7. If any identity is unavailable or differs, return `BLOCKED` or `FAIL` before product acceptance.
+7. Confirm `verification-result.json` has exact keys, exact verifier identity, `status: PASS` and the same repository/branch/commit/parent/tree binding as the final manifest. It must not contain a stale or self-referential manifest hash.
+8. Confirm no package file was written after the final manifest was generated and successfully verified.
+9. If any identity is unavailable or differs, return `BLOCKED` or `FAIL` before product acceptance.
 
 ## Required review domains
 
