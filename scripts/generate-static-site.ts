@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { copy, profile, type Locale, type Project } from '../src/content';
+import { copy, type Locale, type Project } from '../src/content';
+import { publicClaims } from '../src/public-claims';
 import { casePages, insightPages, servicePages, siteConfig, type ContentSection, type LocalizedPageContent } from '../src/static-pages';
 
 const dist = resolve(process.cwd(), 'dist');
@@ -163,42 +164,6 @@ function project(locale: Locale, id: string): Project {
   return match;
 }
 
-function serviceCards(locale: Locale): string {
-  return `<div class="grid">${servicePages.map((item) => `<a class="card" href="${routePath(locale, 'services', item.slug)}" data-portfolio-event="service_view"><p class="eyebrow">${locale === 'ru' ? 'Услуга' : 'Service'}</p><h3>${escapeHtml(item.content[locale].title)}</h3><p>${escapeHtml(serviceSummary(locale, item))}</p><div class="tags">${item.capabilities.slice(0, 5).map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}</div></a>`).join('')}</div>`;
-}
-
-function caseCards(locale: Locale): string {
-  return `<div class="grid">${casePages.map((item) => { const data = project(locale, item.id); return `<a class="card" href="${routePath(locale, 'cases', item.slug)}" data-portfolio-event="case_view"><p class="eyebrow">${data.year}</p><h3>${escapeHtml(data.title)}</h3><p>${escapeHtml(data.description)}</p><div class="tags">${data.tech.slice(0, 5).map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}</div></a>`; }).join('')}</div>`;
-}
-
-function insightCards(locale: Locale): string {
-  return `<div class="grid">${insightPages.map((item) => `<a class="card" href="${routePath(locale, 'insights', item.slug)}" data-portfolio-event="insight_view"><p class="eyebrow">${locale === 'ru' ? 'Практический разбор' : 'Practical insight'}</p><h3>${escapeHtml(item.content[locale].title)}</h3><p>${escapeHtml(item.content[locale].description)}</p></a>`).join('')}</div>`;
-}
-
-function homeDocument(locale: Locale): string {
-  const path = routePath(locale);
-  const counterpartPath = routePath(locale === 'ru' ? 'en' : 'ru');
-  const title = copy[locale].meta.title;
-  const description = copy[locale].meta.description;
-  const directAnswer = locale === 'ru'
-    ? 'Разрабатываю ASP.NET Core приложения, Telegram-ботов, системы автоматизации и интерактивные WebGL-интерфейсы — от архитектуры до проверяемого deployment.'
-    : 'I build ASP.NET Core applications, Telegram bots, automation systems and interactive WebGL interfaces — from architecture to verified deployment.';
-  const profileLd = {
-    '@context': 'https://schema.org',
-    '@type': 'ProfilePage',
-    mainEntity: {
-      '@type': 'Person',
-      name: siteConfig.publicName,
-      description,
-      url: absolute(path),
-      sameAs: [siteConfig.githubUrl, siteConfig.telegramUrl],
-      knowsAbout: ['ASP.NET Core', 'Telegram bots', 'Business process automation', 'Three.js', 'WebGL', 'TypeScript'],
-    },
-  };
-  const body = `<section id="services"><h2>${locale === 'ru' ? 'Услуги' : 'Services'}</h2>${serviceCards(locale)}</section><section id="cases"><h2>${locale === 'ru' ? 'Кейсы' : 'Case studies'}</h2>${caseCards(locale)}</section><section id="insights"><h2>${locale === 'ru' ? 'Практические разборы' : 'Practical insights'}</h2>${insightCards(locale)}</section>`;
-  return documentTemplate({ locale, type: 'home', id: 'home', path, counterpartPath, title, description, directAnswer, body, jsonLd: [profileLd] });
-}
-
 async function writePage(path: string, html: string): Promise<void> {
   const file = outputFile(path);
   await mkdir(dirname(file), { recursive: true });
@@ -210,7 +175,6 @@ const routes: RouteRecord[] = [];
 for (const locale of locales) {
   const homePath = routePath(locale);
   routes.push({ locale, type: 'home', id: 'home', path: homePath, counterpartPath: routePath(locale === 'ru' ? 'en' : 'ru'), updatedAt: contentUpdatedAt, capabilities: [] });
-  if (locale === 'en') await writePage(homePath, homeDocument(locale));
 
   for (const descriptor of servicePages) {
     const path = routePath(locale, 'services', descriptor.slug);
@@ -256,16 +220,152 @@ for (const locale of locales) {
   }
 }
 
+function escapeRegExp(value: string): string {
+  return [...value]
+    .map((character) => /[A-Za-z0-9_-]/.test(character) ? character : `\\${character}`)
+    .join('');
+}
+
+function replaceElementContent(source: string, id: string, value: string): string {
+  const pattern = new RegExp(`(<([a-z][\\w:-]*)\\b[^>]*\\bid="${escapeRegExp(id)}"[^>]*>)[\\s\\S]*?(</\\2>)`, 'i');
+  if (!pattern.test(source)) throw new Error(`Interactive homepage element #${id} is missing.`);
+  return source.replace(pattern, (_match, opening: string, _tag: string, closing: string) => `${opening}${value}${closing}`);
+}
+
+function replaceAttributeById(source: string, id: string, attribute: string, value: string): string {
+  const tagPattern = new RegExp(`<([a-z][\\w:-]*)\\b[^>]*\\bid="${escapeRegExp(id)}"[^>]*>`, 'i');
+  if (!tagPattern.test(source)) throw new Error(`Interactive homepage element #${id} is missing.`);
+  return source.replace(tagPattern, (tag) => {
+    const attributePattern = new RegExp(`\\b${escapeRegExp(attribute)}="[^"]*"`, 'i');
+    if (!attributePattern.test(tag)) throw new Error(`Interactive homepage element #${id} has no ${attribute} attribute.`);
+    return tag.replace(attributePattern, `${attribute}="${escapeHtml(value)}"`);
+  });
+}
+
+function replaceMetaContent(source: string, attribute: 'name' | 'property', key: string, value: string): string {
+  const pattern = new RegExp(`<meta\\b[^>]*\\b${attribute}="${escapeRegExp(key)}"[^>]*>`, 'i');
+  if (!pattern.test(source)) throw new Error(`Interactive homepage meta ${attribute}=${key} is missing.`);
+  return source.replace(pattern, (tag) => tag.replace(/\bcontent="[^"]*"/i, `content="${escapeHtml(value)}"`));
+}
+
+function replaceLinkHref(source: string, rel: string, href: string): string {
+  const pattern = new RegExp(`<link\\b[^>]*\\brel="${escapeRegExp(rel)}"[^>]*>`, 'i');
+  if (!pattern.test(source)) throw new Error(`Interactive homepage link rel=${rel} is missing.`);
+  return source.replace(pattern, (tag) => tag.replace(/\bhref="[^"]*"/i, `href="${href}"`));
+}
+
+function languageSwitcher(locale: Locale): string {
+  if (locale === 'ru') {
+    return `<span class="lang-toggle__option is-active" data-lang-pill="ru" aria-current="page">RU</span>\n        <a class="lang-toggle__option" data-lang-pill="en" data-lang-link href="${routePath('en')}" hreflang="en" data-cursor="link">EN</a>`;
+  }
+  return `<a class="lang-toggle__option" data-lang-pill="ru" data-lang-link href="${routePath('ru')}" hreflang="ru" data-cursor="link">RU</a>\n        <span class="lang-toggle__option is-active" data-lang-pill="en" aria-current="page">EN</span>`;
+}
+
+function localizeInteractiveHomepage(source: string, locale: Locale): string {
+  const t = copy[locale];
+  const path = routePath(locale);
+  let html = source.replace(/<html\b[^>]*\blang="[^"]+"[^>]*>/i, `<html lang="${locale}" data-locale="${locale}">`);
+  html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(t.meta.title)}</title>`);
+  html = replaceMetaContent(html, 'name', 'description', t.meta.description);
+  html = replaceMetaContent(html, 'property', 'og:locale', locale === 'ru' ? 'ru_RU' : 'en_US');
+  html = replaceMetaContent(html, 'property', 'og:title', t.meta.title);
+  html = replaceMetaContent(html, 'property', 'og:description', t.meta.description);
+  html = replaceMetaContent(html, 'property', 'og:url', absolute(path));
+  html = replaceMetaContent(html, 'name', 'twitter:title', t.meta.title);
+  html = replaceMetaContent(html, 'name', 'twitter:description', t.meta.description);
+  html = replaceLinkHref(html, 'canonical', absolute(path));
+  html = html.replace('<body>', '<body data-page-type="home" data-page-id="home" data-interactive-homepage="v1">');
+
+  html = replaceElementContent(html, 'skip-link', locale === 'ru' ? 'Перейти к основному содержимому' : 'Skip to main content');
+  html = replaceElementContent(html, 'loader-label', escapeHtml(t.loaderLabel));
+  html = replaceElementContent(html, 'nav-about', escapeHtml(t.nav.about));
+  html = replaceElementContent(html, 'nav-projects', escapeHtml(t.nav.projects));
+  html = replaceElementContent(html, 'nav-skills', escapeHtml(t.nav.skills));
+  html = replaceElementContent(html, 'nav-contact', escapeHtml(t.nav.contact));
+  html = replaceElementContent(html, 'nav-cta', escapeHtml(t.nav.cta));
+  html = replaceElementContent(html, 'hero-eyebrow', escapeHtml(t.hero.eyebrow));
+  html = replaceElementContent(html, 'hero-line-1', escapeHtml(t.hero.line1));
+  html = replaceElementContent(html, 'hero-line-2', escapeHtml(t.hero.line2));
+  html = replaceElementContent(html, 'hero-tagline', t.hero.tagline);
+  html = replaceElementContent(html, 'hero-primary', `${escapeHtml(t.hero.primary)} <span class="btn__arrow">→</span>`);
+  html = replaceElementContent(html, 'hero-secondary', escapeHtml(t.hero.secondary));
+  html = replaceElementContent(html, 'hero-scroll', escapeHtml(t.hero.scroll));
+  html = replaceElementContent(html, 'hero-meta', escapeHtml(t.hero.meta));
+  html = replaceElementContent(html, 'about-title', escapeHtml(t.about.title));
+  html = replaceElementContent(html, 'about-lead', t.about.lead);
+  html = replaceElementContent(html, 'about-body', escapeHtml(t.about.body));
+  html = replaceElementContent(html, 'about-quote', escapeHtml(t.about.quote));
+  html = replaceElementContent(html, 'about-card-performance-title', escapeHtml(t.about.cards.performance.title));
+  html = replaceElementContent(html, 'about-card-performance-text', escapeHtml(publicClaims.performanceCard[locale]));
+  html = replaceElementContent(html, 'about-card-creativity-title', escapeHtml(t.about.cards.creativity.title));
+  html = replaceElementContent(html, 'about-card-creativity-text', escapeHtml(t.about.cards.creativity.text));
+  html = replaceElementContent(html, 'about-card-architecture-title', escapeHtml(t.about.cards.architecture.title));
+  html = replaceElementContent(html, 'about-card-architecture-text', escapeHtml(t.about.cards.architecture.text));
+  html = replaceElementContent(html, 'services-title', escapeHtml(t.servicesTitle));
+  html = replaceElementContent(html, 'projects-title', escapeHtml(t.projectsTitle));
+  html = replaceElementContent(html, 'process-title', escapeHtml(t.processTitle));
+  html = replaceElementContent(html, 'skills-title', escapeHtml(t.skillsTitle));
+  html = replaceElementContent(html, 'contact-title', escapeHtml(t.contact.title));
+  html = replaceElementContent(html, 'contact-pitch', t.contact.pitch);
+  html = replaceElementContent(html, 'contact-text', escapeHtml(t.contact.text));
+  html = replaceElementContent(html, 'form-name-label', escapeHtml(t.contact.form.name));
+  html = replaceElementContent(html, 'form-email-label', escapeHtml(t.contact.form.email));
+  html = replaceElementContent(html, 'form-message-label', escapeHtml(t.contact.form.message));
+  html = replaceAttributeById(html, 'form-name-input', 'placeholder', t.contact.form.namePlaceholder);
+  html = replaceAttributeById(html, 'form-email-input', 'placeholder', t.contact.form.emailPlaceholder);
+  html = replaceAttributeById(html, 'form-message-input', 'placeholder', t.contact.form.messagePlaceholder);
+  html = replaceElementContent(html, 'form-submit', `${escapeHtml(t.contact.form.submit)} <span class="btn__arrow">→</span>`);
+  html = replaceElementContent(html, 'contact-sent', escapeHtml(t.contact.form.sent));
+  html = replaceElementContent(html, 'footer-built', escapeHtml(t.footer.built));
+  html = replaceElementContent(html, 'footer-top', escapeHtml(t.footer.top));
+  if (locale === 'en') html = replaceElementContent(html, 'year', copyrightYear);
+
+  html = replaceAttributeById(html, 'lang-toggle', 'aria-label', locale === 'ru' ? 'Выбор языка' : 'Language selection');
+  html = replaceElementContent(html, 'lang-toggle', languageSwitcher(locale));
+  html = html.replace(/(<nav class="header__nav" aria-label=")[^"]*(")/i, `$1${locale === 'ru' ? 'Основная навигация' : 'Primary navigation'}$2`);
+  html = html.replace(/(<button class="case__close"[^>]*aria-label=")[^"]*(")/i, `$1${locale === 'ru' ? 'Закрыть описание проекта' : 'Close project details'}$2`);
+  return html;
+}
+
+function homepageDirectory(locale: Locale): string {
+  const title = locale === 'ru' ? 'Услуги, кейсы и разборы' : 'Services, case studies and insights';
+  return `<section class="seo-directory section" id="explore"><div class="section__head"><span class="section__index">07</span><h2 class="section__title">${title}</h2></div><div class="seo-grid">${servicePages.map((item) => `<a href="${routePath(locale, 'services', item.slug)}" data-portfolio-event="service_view"><h3>${escapeHtml(item.content[locale].title)}</h3><p>${escapeHtml(serviceSummary(locale, item))}</p></a>`).join('')}${casePages.map((item) => { const data = project(locale, item.id); return `<a href="${routePath(locale, 'cases', item.slug)}" data-portfolio-event="case_view"><h3>${escapeHtml(data.title)}</h3><p>${escapeHtml(data.tagline)}</p></a>`; }).join('')}${insightPages.map((item) => `<a href="${routePath(locale, 'insights', item.slug)}" data-portfolio-event="insight_view"><h3>${escapeHtml(item.content[locale].title)}</h3><p>${escapeHtml(item.content[locale].description)}</p></a>`).join('')}</div></section>`;
+}
+
+function occurrenceCount(source: string, value: string): number {
+  return source.split(value).length - 1;
+}
+
+function interactiveHomeDocument(source: string, locale: Locale): string {
+  const label = `${locale.toUpperCase()} interactive homepage`;
+  if (source.includes('data-interactive-homepage="v1"') || source.includes('data-homepage-assembly="v1"')) {
+    throw new Error(`${label} assembly was applied more than once.`);
+  }
+  for (const point of ['</head>', '<footer class="footer">', '</body>']) {
+    if (occurrenceCount(source, point) !== 1) throw new Error(`${label} expected exactly one ${point} injection point.`);
+  }
+
+  const path = routePath(locale);
+  const counterpartPath = routePath(locale === 'ru' ? 'en' : 'ru');
+  const ruPath = locale === 'ru' ? path : counterpartPath;
+  const enPath = locale === 'en' ? path : counterpartPath;
+  const alternates = `<link rel="alternate" hreflang="ru" href="${absolute(ruPath)}" />\n  <link rel="alternate" hreflang="en" href="${absolute(enPath)}" />\n  <link rel="alternate" hreflang="x-default" href="${absolute(ruPath)}" />`;
+  const profileLd = { '@context': 'https://schema.org', '@type': 'ProfilePage', mainEntity: { '@type': 'Person', name: siteConfig.publicName, description: copy[locale].meta.description, url: absolute(path), sameAs: [siteConfig.githubUrl, siteConfig.telegramUrl], knowsAbout: ['ASP.NET Core', 'Telegram bots', 'Business process automation', 'Three.js', 'WebGL', 'TypeScript'] } };
+  let html = localizeInteractiveHomepage(source, locale);
+  html = html.replace('</head>', `  ${alternates}\n  <script type="application/ld+json">${safeJson(profileLd)}</script>\n  <style data-homepage-assembly="v1">.seo-directory{position:relative;z-index:4}.seo-directory .seo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem}.seo-directory a{display:block;text-decoration:none;border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:1rem;background:rgba(255,255,255,.035)}.seo-directory a:hover,.seo-directory a:focus-visible{border-color:rgba(103,232,249,.55)}.seo-directory h3{margin:0 0 .4rem}.seo-directory p{margin:0;color:var(--text-dim)}</style>\n</head>`);
+  html = html.replace('<footer class="footer">', `${homepageDirectory(locale)}<footer class="footer">`);
+  html = html.replace('</body>', `${analyticsScript()}</body>`);
+
+  if (occurrenceCount(html, 'data-interactive-homepage="v1"') !== 1 || occurrenceCount(html, 'data-homepage-assembly="v1"') !== 1 || occurrenceCount(html, 'data-portfolio-runtime="events"') !== 1) {
+    throw new Error(`${label} assembly markers are incomplete or duplicated.`);
+  }
+  return html;
+}
+
 const rootHtmlPath = resolve(dist, 'index.html');
-let rootHtml = await readFile(rootHtmlPath, 'utf8');
-const rootAlternates = `<link rel="alternate" hreflang="ru" href="${absolute(routePath('ru'))}" />\n  <link rel="alternate" hreflang="en" href="${absolute(routePath('en'))}" />\n  <link rel="alternate" hreflang="x-default" href="${absolute(routePath('ru'))}" />`;
-const rootProfileLd = { '@context': 'https://schema.org', '@type': 'ProfilePage', mainEntity: { '@type': 'Person', name: siteConfig.publicName, description: copy.ru.meta.description, url: siteConfig.portfolioUrl, sameAs: [siteConfig.githubUrl, siteConfig.telegramUrl], knowsAbout: ['ASP.NET Core', 'Telegram bots', 'Business process automation', 'Three.js', 'WebGL', 'TypeScript'] } };
-rootHtml = rootHtml.replace('</head>', `  ${rootAlternates}\n  <script type="application/ld+json">${safeJson(rootProfileLd)}</script>\n  <style>.seo-directory{position:relative;z-index:4}.seo-directory .seo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem}.seo-directory a{display:block;text-decoration:none;border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:1rem;background:rgba(255,255,255,.035)}.seo-directory a:hover,.seo-directory a:focus-visible{border-color:rgba(103,232,249,.55)}.seo-directory h3{margin:0 0 .4rem}.seo-directory p{margin:0;color:var(--text-dim)}</style>\n</head>`);
-rootHtml = rootHtml.replace(/<button class="lang-toggle"[\s\S]*?<\/button>/, `<a class="lang-toggle" id="lang-toggle" href="${routePath('en')}" hreflang="en" data-cursor="link" data-magnetic aria-label="English version"><span class="lang-toggle__option is-active" data-lang-pill="ru">RU</span><span class="lang-toggle__option" data-lang-pill="en">EN</span></a>`);
-const directory = `<section class="seo-directory section" id="explore"><div class="section__head"><span class="section__index">07</span><h2 class="section__title">Услуги, кейсы и разборы</h2></div><div class="seo-grid">${servicePages.map((item) => `<a href="${routePath('ru', 'services', item.slug)}" data-portfolio-event="service_view"><h3>${escapeHtml(item.content.ru.title)}</h3><p>${escapeHtml(serviceSummary('ru', item))}</p></a>`).join('')}${casePages.map((item) => { const data = project('ru', item.id); return `<a href="${routePath('ru', 'cases', item.slug)}" data-portfolio-event="case_view"><h3>${escapeHtml(data.title)}</h3><p>${escapeHtml(data.tagline)}</p></a>`; }).join('')}${insightPages.map((item) => `<a href="${routePath('ru', 'insights', item.slug)}" data-portfolio-event="insight_view"><h3>${escapeHtml(item.content.ru.title)}</h3><p>${escapeHtml(item.content.ru.description)}</p></a>`).join('')}</div></section>`;
-rootHtml = rootHtml.replace('<footer class="footer">', `${directory}<footer class="footer">`);
-rootHtml = rootHtml.replace('</body>', `${analyticsScript()}</body>`);
-await writeFile(rootHtmlPath, rootHtml, 'utf8');
+const interactiveBaseHtml = await readFile(rootHtmlPath, 'utf8');
+await writeFile(rootHtmlPath, interactiveHomeDocument(interactiveBaseHtml, 'ru'), 'utf8');
+await writePage(routePath('en'), interactiveHomeDocument(interactiveBaseHtml, 'en'));
 
 const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${routes.map((route) => `  <url>\n    <loc>${absolute(route.path)}</loc>\n    <lastmod>${route.updatedAt}</lastmod>\n    <xhtml:link rel="alternate" hreflang="${route.locale}" href="${absolute(route.path)}" />\n    <xhtml:link rel="alternate" hreflang="${route.locale === 'ru' ? 'en' : 'ru'}" href="${absolute(route.counterpartPath)}" />\n    <xhtml:link rel="alternate" hreflang="x-default" href="${absolute(route.locale === 'ru' ? route.path : route.counterpartPath)}" />\n  </url>`).join('\n')}\n</urlset>\n`;
 await writeFile(resolve(dist, 'sitemap.xml'), sitemap, 'utf8');
