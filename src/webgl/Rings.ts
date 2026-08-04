@@ -47,7 +47,7 @@ export class Rings {
           wireframe: Math.random() < 0.4,
         }),
       );
-      const scale = 0.5 + Math.random() * 1.3;
+      const scale = 0.45 + Math.random() * 0.75;
       shard.scale.setScalar(scale);
       this.shards.push(shard);
       this.shardData.push({
@@ -76,7 +76,7 @@ export class Rings {
       shard.position.set(
         Math.cos(a) * d.radius,
         d.y + Math.sin(time * 0.4 + d.phase) * 0.25,
-        Math.sin(a) * d.radius,
+        Math.sin(a) * d.radius * 0.42,
       );
       shard.rotation.x = time * d.rot;
       shard.rotation.y = time * d.rot * 0.7;

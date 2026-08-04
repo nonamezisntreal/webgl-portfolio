@@ -26,7 +26,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 </head>
 <body>
-  <a class="skip-link" href="#content">Перейти к основному содержимому</a>
+  <a class="skip-link" id="skip-link" href="#content">Перейти к основному содержимому</a>
 
   <!-- ======== Loader ======== -->
   <div class="loader" id="loader" aria-hidden="true">
@@ -60,10 +60,10 @@
       <a href="#contact" data-cursor="link" id="nav-contact">Контакты</a>
     </nav>
     <div class="header__actions">
-      <a class="lang-toggle" id="lang-toggle" href="%BASE_URL%en/" data-cursor="link" data-magnetic aria-label="English version">
-        <span class="lang-toggle__option is-active" data-lang-pill="ru" aria-current="page">RU</span>
-        <span class="lang-toggle__option" data-lang-pill="en">EN</span>
-      </a>
+      <div class="lang-toggle" id="lang-toggle" data-magnetic aria-label="Выбор языка">
+        <a class="lang-toggle__option is-active" data-lang-pill="ru" data-lang-link="ru" href="%BASE_URL%" hreflang="ru" data-cursor="link" aria-current="page">RU</a>
+        <a class="lang-toggle__option" data-lang-pill="en" data-lang-link="en" href="%BASE_URL%en/" hreflang="en" data-cursor="link">EN</a>
+      </div>
       <a class="header__cta" href="#contact" data-cursor="link" data-magnetic id="nav-cta">Связаться</a>
     </div>
     <span class="header__progress" id="progress"></span>

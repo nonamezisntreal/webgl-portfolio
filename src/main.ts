@@ -12,7 +12,19 @@ import { initInteractions, bindMagnetic } from './ui/interactions';
 import { Experience } from './webgl/Experience';
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-const locale: Locale = 'ru';
+
+function localeFromPath(pathname: string): Locale {
+  const configuredBase = import.meta.env.BASE_URL.endsWith('/')
+    ? import.meta.env.BASE_URL
+    : `${import.meta.env.BASE_URL}/`;
+  const normalizedPath = pathname.replace(/\/{2,}/g, '/');
+  const relativePath = normalizedPath.startsWith(configuredBase)
+    ? normalizedPath.slice(configuredBase.length)
+    : normalizedPath.replace(/^\//, '');
+  return relativePath.split('/').filter(Boolean)[0] === 'en' ? 'en' : 'ru';
+}
+
+const locale: Locale = localeFromPath(window.location.pathname);
 
 function setText(id: string, value: string): void {
   const el = document.getElementById(id);
@@ -36,6 +48,7 @@ function applyLocale(currentLocale: Locale): void {
   document.title = t.meta.title;
   document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute('content', t.meta.description);
 
+  setText('skip-link', currentLocale === 'ru' ? 'Перейти к основному содержимому' : 'Skip to main content');
   setText('loader-label', t.loaderLabel);
   setText('nav-about', t.nav.about);
   setText('nav-projects', t.nav.projects);
@@ -81,8 +94,11 @@ function applyLocale(currentLocale: Locale): void {
   setText('footer-built', t.footer.built);
   setText('footer-top', t.footer.top);
 
-  document.querySelectorAll('[data-lang-pill]').forEach((pill) => {
-    pill.classList.toggle('is-active', (pill as HTMLElement).dataset.langPill === currentLocale);
+  document.querySelectorAll<HTMLElement>('[data-lang-pill]').forEach((pill) => {
+    const isCurrent = pill.dataset.langPill === currentLocale;
+    pill.classList.toggle('is-active', isCurrent);
+    if (isCurrent) pill.setAttribute('aria-current', 'page');
+    else pill.removeAttribute('aria-current');
   });
 
   renderContent(currentLocale);
@@ -90,8 +106,17 @@ function applyLocale(currentLocale: Locale): void {
   if (!reducedMotion) bindMagnetic();
 }
 
-/* The root canonical URL is always Russian. English content lives at /en/. */
+function bindLocaleLinks(): void {
+  document.querySelectorAll<HTMLAnchorElement>('[data-lang-link]').forEach((link) => {
+    link.addEventListener('click', (event) => {
+      if (link.dataset.langLink === locale) event.preventDefault();
+    });
+  });
+}
+
+/* Locale is derived from the physical canonical route: root = RU, /en/ = EN. */
 applyLocale(locale);
+bindLocaleLinks();
 
 /* UI layer works even if WebGL fails. */
 initReveals(reducedMotion);

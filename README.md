@@ -9,7 +9,7 @@ A dark interactive WebGL homepage plus statically generated service, case-study 
 ## ✦ What the build produces
 
 - interactive Russian homepage at `/webgl-portfolio/`;
-- static English homepage at `/webgl-portfolio/en/`;
+- interactive English homepage at `/webgl-portfolio/en/`, sharing the same WebGL runtime and route-derived locale state;
 - five service pages in RU and EN;
 - four case-study pages in RU and EN;
 - four technical insight pages in RU and EN;
@@ -70,7 +70,7 @@ There is no second project registry.
 - `src/static-pages.ts` contains only static routes, extended service/insight content, capability tags and relationships.
 - `src/public-claims.ts` contains verified public performance, localization and deployment wording used by the canonical content source.
 - `scripts/validate-content.ts` binds the content sources and fails on duplicate IDs, broken relationships, missing localization or public-profile drift.
-- `scripts/finalize-static-site.ts` repairs only bounded GitHub Pages navigation compatibility on generated Russian content pages.
+- `scripts/finalize-static-site.ts` repairs bounded GitHub Pages navigation compatibility on generated RU/EN content pages so both localized interactive homepages receive valid section targets.
 - `scripts/normalize-artifact.mjs` derives `generatedAt` from versioned content dates, canonicalizes text artifacts to LF and normalizes all `dist` mtimes.
 - `scripts/validate-public-claims.mjs` rejects obsolete wording and numeric frame-rate promises in canonical source, generated HTML and JavaScript bundles.
 - `scripts/validate-dist.mjs` requires one canonical per page, parseable JSON-LD and a bounded non-WebGL runtime contract for static pages.
