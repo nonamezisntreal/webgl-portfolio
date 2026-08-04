@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 const projectRoot = process.cwd();
 const dist = resolve(projectRoot, 'dist');
 const node = process.execPath;
-const bun = process.env.BUN_EXE ?? 'bun';
+const bun = process.env.BUN_EXE ?? (process.platform === 'win32' ? 'bun.cmd' : 'bun');
 const reportPath = resolve(process.env.ADVERSARIAL_REPORT ?? resolve(tmpdir(), 'webgl-portfolio-adversarial-results.json'));
 const validators = {
   dist: resolve(projectRoot, 'scripts/validate-dist.mjs'),
@@ -30,6 +30,7 @@ function commandResult(executable, args, cwd, env = {}) {
     env: { ...process.env, ...env },
     encoding: 'utf8',
     windowsHide: true,
+    shell: process.platform === 'win32' && /\.cmd$/iu.test(executable),
   });
 }
 
@@ -340,10 +341,10 @@ const cases = [
     await mutateText(resolve(root, staticPage), (html) => html.replace('</head>', '<meta name="description" content="Duplicate description" /></head>'));
   }),
 
-  distCase('ADV-023', 'json-ld', 'invalid JSON syntax', 'JSON-LD block 1 is not valid JSON', async (root) => {
+  distCase('ADV-023', 'json-ld', 'invalid JSON syntax', 'JSON-LD block 1 is not valid strict JSON', async (root) => {
     await mutateFirstJsonLd(resolve(root, staticPage), '{not-json');
   }),
-  distCase('ADV-024', 'json-ld', 'one invalid JSON-LD block among valid blocks', 'JSON-LD block 2 is not valid JSON', async (root) => {
+  distCase('ADV-024', 'json-ld', 'one invalid JSON-LD block among valid blocks', 'JSON-LD block 2 is not valid strict JSON', async (root) => {
     await mutateText(resolve(root, staticPage), (html) => html.replace('</head>', '<script type="application/ld+json">{not-json</script></head>'));
   }),
   distCase('ADV-025', 'json-ld', 'empty JSON-LD object', 'must contain a nonempty object', async (root) => {
@@ -355,7 +356,7 @@ const cases = [
   distCase('ADV-027', 'json-ld', 'unsupported JSON-LD @type', 'unsupported JSON-LD @type Organization', async (root) => {
     await mutateFirstJsonLd(resolve(root, staticPage), (body) => { const value = JSON.parse(body); value['@type'] = 'Organization'; return JSON.stringify(value); });
   }),
-  distCase('ADV-028', 'json-ld', 'missing required Service.name', 'Service.name is required', async (root) => {
+  distCase('ADV-028', 'json-ld', 'missing required Service.name', 'missing keys: name', async (root) => {
     await mutateFirstJsonLd(resolve(root, staticPage), (body) => { const value = JSON.parse(body); delete value.name; return JSON.stringify(value); });
   }),
   distCase('ADV-029', 'json-ld', 'attacker URL in Service structured data', 'Service.url must equal', async (root) => {
