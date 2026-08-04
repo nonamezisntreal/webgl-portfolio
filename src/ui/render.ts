@@ -112,14 +112,14 @@ function renderContactLinks(locale: Locale): void {
   if (!host) return;
   const labels = getCopy(locale).contact.labels;
   const links = [
-    { label: labels.email, value: profile.email, href: `mailto:${profile.email}` },
-    { label: labels.github, value: profile.github.replace('https://', ''), href: profile.github },
-    { label: labels.telegram, value: profile.telegram.replace('https://', ''), href: profile.telegram },
+    { label: labels.email, value: profile.email, href: `mailto:${profile.email}`, external: false },
+    { label: labels.github, value: profile.github.replace('https://', ''), href: profile.github, external: true },
+    { label: labels.telegram, value: profile.telegram.replace('https://', ''), href: profile.telegram, external: true },
   ];
   host.innerHTML = links
     .map(
       (link) => `
-  <a class="contact__link" href="${link.href}" target="_blank" rel="noopener noreferrer" data-cursor="link" data-magnetic>
+  <a class="contact__link" href="${link.href}"${link.external ? ' target="_blank" rel="noopener noreferrer"' : ''} data-cursor="link" data-magnetic>
     <span class="contact__link-label">${link.label}</span>
     <span class="contact__link-value">${link.value} <span aria-hidden="true">↗</span></span>
   </a>`,
