@@ -1,5 +1,6 @@
 import './styles/main.css';
 import { getCopy, type Locale } from './content';
+import { publicClaims } from './public-claims';
 import { renderContent } from './ui/render';
 import { initScroll } from './ui/scroll';
 import { initReveals } from './ui/reveal';
@@ -8,15 +9,10 @@ import { initCursor } from './ui/cursor';
 import { initProjectCases } from './ui/projects';
 import { initContactForm } from './ui/contact';
 import { initInteractions, bindMagnetic } from './ui/interactions';
+import { Experience } from './webgl/Experience';
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-const LOCALE_KEY = 'hazard-locale';
-let locale: Locale = readInitialLocale();
-
-function readInitialLocale(): Locale {
-  const saved = localStorage.getItem(LOCALE_KEY);
-  return saved === 'en' || saved === 'ru' ? saved : 'ru';
-}
+const locale: Locale = 'ru';
 
 function setText(id: string, value: string): void {
   const el = document.getElementById(id);
@@ -33,12 +29,10 @@ function setPlaceholder(id: string, value: string): void {
   if (el) el.placeholder = value;
 }
 
-function applyLocale(nextLocale: Locale): void {
-  locale = nextLocale;
-  localStorage.setItem(LOCALE_KEY, locale);
-  const t = getCopy(locale);
+function applyLocale(currentLocale: Locale): void {
+  const t = getCopy(currentLocale);
 
-  document.documentElement.lang = locale;
+  document.documentElement.lang = currentLocale;
   document.title = t.meta.title;
   document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute('content', t.meta.description);
 
@@ -63,7 +57,7 @@ function applyLocale(nextLocale: Locale): void {
   setText('about-body', t.about.body);
   setText('about-quote', t.about.quote);
   setText('about-card-performance-title', t.about.cards.performance.title);
-  setText('about-card-performance-text', t.about.cards.performance.text);
+  setText('about-card-performance-text', publicClaims.performanceCard[currentLocale]);
   setText('about-card-creativity-title', t.about.cards.creativity.title);
   setText('about-card-creativity-text', t.about.cards.creativity.text);
   setText('about-card-architecture-title', t.about.cards.architecture.title);
@@ -88,27 +82,18 @@ function applyLocale(nextLocale: Locale): void {
   setText('footer-top', t.footer.top);
 
   document.querySelectorAll('[data-lang-pill]').forEach((pill) => {
-    pill.classList.toggle('is-active', (pill as HTMLElement).dataset.langPill === locale);
+    pill.classList.toggle('is-active', (pill as HTMLElement).dataset.langPill === currentLocale);
   });
 
-  renderContent(locale);
+  renderContent(currentLocale);
   initTilt(reducedMotion);
   if (!reducedMotion) bindMagnetic();
 }
 
-function initLanguageSwitch(): void {
-  const toggle = document.getElementById('lang-toggle');
-  if (!toggle) return;
-  toggle.addEventListener('click', () => {
-    applyLocale(locale === 'ru' ? 'en' : 'ru');
-  });
-}
-
-/* 1. Inject localized dynamic content first so reveals/tilt can bind to it. */
+/* The root canonical URL is always Russian. English content lives at /en/. */
 applyLocale(locale);
-initLanguageSwitch();
 
-/* 2. UI layer (works even if WebGL fails). */
+/* UI layer works even if WebGL fails. */
 initReveals(reducedMotion);
 initTilt(reducedMotion);
 initCursor(reducedMotion);
@@ -116,13 +101,13 @@ initInteractions(reducedMotion);
 initProjectCases(() => locale);
 initContactForm(() => locale);
 
-/* 3. WebGL layer — lazy-loaded so the UI paints instantly. */
+/* Primary HTML is independent of WebGL initialization and remains usable on fallback. */
 const canvas = document.getElementById('gl') as HTMLCanvasElement;
 const fpsLabel = document.getElementById('hero-fps');
+let disposeExperience: (() => void) | undefined;
 
 async function boot(): Promise<void> {
   try {
-    const { Experience } = await import('./webgl/Experience');
     const experience = new Experience({
       canvas,
       reducedMotion,
@@ -130,6 +115,7 @@ async function boot(): Promise<void> {
         if (fpsLabel) fpsLabel.textContent = `${fps} fps`;
       },
     });
+    disposeExperience = () => experience.dispose();
 
     initScroll(reducedMotion, {
       onProgress: (p) => experience.setScroll(p),
@@ -139,8 +125,8 @@ async function boot(): Promise<void> {
     if (reducedMotion) experience.renderOnce();
     else experience.start();
   } catch (err) {
-    // WebGL unavailable → static dark page still works.
     console.warn('WebGL experience disabled:', err);
+    document.documentElement.classList.add('webgl-fallback');
     canvas.remove();
     initScroll(reducedMotion, { onProgress: () => {}, onSection: () => {} });
   } finally {
@@ -148,7 +134,6 @@ async function boot(): Promise<void> {
   }
 }
 
-/* Loader: counts up while the three.js chunk loads. */
 const loader = document.getElementById('loader');
 const counter = document.getElementById('loader-count');
 let progress = 0;
@@ -167,4 +152,5 @@ function hideLoader(): void {
   }, 250);
 }
 
+window.addEventListener('pagehide', () => disposeExperience?.(), { once: true });
 boot();

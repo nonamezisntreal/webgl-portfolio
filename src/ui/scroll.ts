@@ -66,6 +66,8 @@ export function initScroll(reducedMotion: boolean, callbacks: ScrollCallbacks): 
       e.preventDefault();
       if (lenis) lenis.scrollTo(target as HTMLElement, { offset: -10 });
       else target.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth' });
+      if (window.location.hash !== id) window.history.pushState(null, '', id);
+      if (a.classList.contains('skip-link')) (target as HTMLElement).focus({ preventScroll: true });
     });
   });
 }

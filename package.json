@@ -5,16 +5,37 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "validate:workflow": "node scripts/validate-workflow-policy.mjs",
+    "validate:content": "bun scripts/validate-content.ts",
+    "generate:static": "bun scripts/generate-static-site.ts",
+    "harden:homepage": "bun scripts/harden-homepage.ts",
+    "finalize:static": "bun scripts/finalize-static-site.ts",
+    "normalize:artifact": "node scripts/normalize-artifact.mjs",
+    "build": "bun run validate:workflow && bun run typecheck && bun run validate:content && vite build && bun run generate:static && bun run harden:homepage && bun run finalize:static && bun run normalize:artifact && bun run validate:dist",
+    "validate:dist": "node scripts/validate-dist.mjs && node scripts/validate-public-claims.mjs",
+    "test:adversarial": "node scripts/test-adversarial.mjs",
+    "test:review03": "node scripts/test-review-03-regressions.mjs",
+    "test:browser": "node scripts/test-browser-smoke.mjs",
+    "evidence:create": "node scripts/create-remediation-03-evidence.mjs",
+    "evidence:verify": "node scripts/verify-remediation-03-evidence.mjs",
+    "evidence:test": "node scripts/test-remediation-03-evidence.mjs",
+    "hash:dist": "node scripts/hash-dist-tree.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
-    "lenis": "^1.1.14",
-    "three": "^0.165.0"
+    "lenis": "1.3.23",
+    "three": "0.165.0"
   },
   "devDependencies": {
-    "@types/three": "^0.165.0",
-    "typescript": "^5.4.5",
-    "vite": "^5.4.0"
+    "@types/three": "0.165.0",
+    "fast-xml-parser": "5.7.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.6",
+    "yaml": "2.8.3"
+  },
+  "overrides": {
+    "esbuild": "0.28.1",
+    "postcss": "8.5.25"
   }
 }

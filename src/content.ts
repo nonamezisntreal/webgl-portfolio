@@ -1,9 +1,4 @@
-/**
- * ─────────────────────────────────────────────────────────────
- *  CONTENT CONFIG — edit everything about *you* in this file.
- *  No need to touch the WebGL or UI code to personalize the site.
- * ─────────────────────────────────────────────────────────────
- */
+import { publicClaims } from './public-claims';
 
 export type Locale = 'ru' | 'en';
 
@@ -14,9 +9,7 @@ export interface Project {
   description: string;
   tech: string[];
   year: string;
-  /** Accent hue used for the card glow (CSS color) */
   glow: string;
-  /** Extended case study shown in the overlay */
   caseStudy: {
     challenge: string;
     solution: string;
@@ -102,7 +95,7 @@ export const copy = {
       cards: {
         performance: {
           title: 'Производительность',
-          text: '60fps — база, а не цель. Профилирование, батчинг, аккуратный рендер и быстрый UX.',
+          text: publicClaims.performanceCard.ru,
         },
         creativity: {
           title: 'Интерактив',
@@ -124,7 +117,7 @@ export const copy = {
       {
         icon: '◈',
         title: 'Интерактивные WebGL-интерфейсы',
-        text: 'Three.js, кастомные GLSL-шейдеры, scroll-driven сцены и микроанимации, которые держат стабильные 60fps.',
+        text: publicClaims.webglServiceSummary.ru,
       },
       {
         icon: '⬢',
@@ -267,11 +260,11 @@ export const copy = {
           challenge:
             'Сделать не просто лендинг, а атмосферный experience: WebGL должен быть заметным, но не мешать чтению и контактам.',
           solution:
-            'UI и WebGL разделены по слоям: Three.js грузится лениво, сцена реагирует на мышь/скролл, bloom приглушается на контентных секциях, а текст и проекты вынесены в один конфиг.',
+            'UI и WebGL разделены по слоям: Three.js изолирован от рендеринга контента, сцена реагирует на мышь/скролл, bloom приглушается на контентных секциях, а текст и проекты вынесены в один конфиг.',
           highlights: [
             'Шейдерное энергетическое ядро, частицы, орбиты и light trails',
-            'Локализация RU/EN без перезагрузки страницы',
-            'Деплой на GitHub Pages через gh-pages branch',
+            publicClaims.localizationArchitecture.ru,
+            publicClaims.deploymentArchitecture.ru,
           ],
           link: 'https://github.com/nonamezisntreal/webgl-portfolio',
         },
@@ -313,7 +306,7 @@ export const copy = {
       cards: {
         performance: {
           title: 'Performance',
-          text: '60fps is the baseline, not the goal. Profiling, batching, careful rendering and fast UX.',
+          text: publicClaims.performanceCard.en,
         },
         creativity: {
           title: 'Interaction',
@@ -335,7 +328,7 @@ export const copy = {
       {
         icon: '◈',
         title: 'Interactive WebGL interfaces',
-        text: 'Three.js, custom GLSL shaders, scroll-driven scenes and micro-animations that hold a steady 60fps.',
+        text: publicClaims.webglServiceSummary.en,
       },
       {
         icon: '⬢',
@@ -478,11 +471,11 @@ export const copy = {
           challenge:
             'Build more than a landing page: a cinematic experience where WebGL feels central without hurting readability or contact conversion.',
           solution:
-            'Separated UI and WebGL layers: Three.js lazy-loads, the scene reacts to pointer and scroll, bloom calms down in content sections and copy/projects live in one editable config.',
+            'Separated UI and WebGL layers: Three.js stays isolated from content rendering, the scene reacts to pointer and scroll, bloom calms down in content sections and copy/projects live in one editable config.',
           highlights: [
             'Shader-driven energy core, particles, orbit rings and light trails',
-            'RU/EN localization without a page reload',
-            'GitHub Pages deployment through a gh-pages branch',
+            publicClaims.localizationArchitecture.en,
+            publicClaims.deploymentArchitecture.en,
           ],
           link: 'https://github.com/nonamezisntreal/webgl-portfolio',
         },

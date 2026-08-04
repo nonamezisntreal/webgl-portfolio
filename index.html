@@ -5,13 +5,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Hazard — Full-stack разработчик</title>
   <meta name="description" content="Full-stack разработчик: интерактивные WebGL-интерфейсы, ASP.NET/React-продукты и аккуратная инженерная архитектура." />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
   <meta name="theme-color" content="#06060b" />
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="canonical" href="https://nonamezisntreal.github.io/webgl-portfolio/" />
+  <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="ru_RU" />
+  <meta property="og:title" content="Hazard — Full-stack разработчик" />
+  <meta property="og:description" content="Full-stack разработчик: интерактивные WebGL-интерфейсы, ASP.NET/React-продукты и аккуратная инженерная архитектура." />
+  <meta property="og:url" content="https://nonamezisntreal.github.io/webgl-portfolio/" />
+  <meta property="og:site_name" content="Hazard Portfolio" />
+
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Hazard — Full-stack разработчик" />
+  <meta name="twitter:description" content="Full-stack разработчик: интерактивные WebGL-интерфейсы, ASP.NET/React-продукты и аккуратная инженерная архитектура." />
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 </head>
 <body>
+  <a class="skip-link" href="#content">Перейти к основному содержимому</a>
+
   <!-- ======== Loader ======== -->
   <div class="loader" id="loader" aria-hidden="true">
     <div class="loader__core">
@@ -37,23 +53,23 @@
     <a class="header__logo" href="#hero" data-cursor="link" data-magnetic>
       <span class="header__mark">◆</span> hazard<span class="accent">.dev</span>
     </a>
-    <nav class="header__nav" aria-label="Primary">
+    <nav class="header__nav" aria-label="Основная навигация">
       <a href="#about" data-cursor="link" id="nav-about">Обо мне</a>
       <a href="#projects" data-cursor="link" id="nav-projects">Проекты</a>
       <a href="#skills" data-cursor="link" id="nav-skills">Навыки</a>
       <a href="#contact" data-cursor="link" id="nav-contact">Контакты</a>
     </nav>
     <div class="header__actions">
-      <button class="lang-toggle" id="lang-toggle" type="button" data-cursor="link" data-magnetic aria-label="Switch language">
-        <span class="lang-toggle__option is-active" data-lang-pill="ru">RU</span>
+      <a class="lang-toggle" id="lang-toggle" href="%BASE_URL%en/" data-cursor="link" data-magnetic aria-label="English version">
+        <span class="lang-toggle__option is-active" data-lang-pill="ru" aria-current="page">RU</span>
         <span class="lang-toggle__option" data-lang-pill="en">EN</span>
-      </button>
+      </a>
       <a class="header__cta" href="#contact" data-cursor="link" data-magnetic id="nav-cta">Связаться</a>
     </div>
     <span class="header__progress" id="progress"></span>
   </header>
 
-  <main id="content">
+  <main id="content" tabindex="-1">
     <!-- ======== Hero ======== -->
     <section class="hero section" id="hero" data-scene="hero">
       <div class="hero__inner">
@@ -78,7 +94,7 @@
       </div>
       <div class="hero__meta" aria-hidden="true">
         <span id="hero-meta">UTC+05 · удалённо</span>
-        <span id="hero-fps">60 fps</span>
+        <span id="hero-fps" hidden></span>
       </div>
     </section>
 
@@ -102,7 +118,7 @@
           <div class="about__card reveal" data-rv style="--i:2" data-tilt>
             <span class="about__card-icon">⚡</span>
             <h3 id="about-card-performance-title">Производительность</h3>
-            <p id="about-card-performance-text">60fps — база, а не цель.</p>
+            <p id="about-card-performance-text">Профилирование, frame budgets, адаптивная детализация и graceful fallback для слабых устройств.</p>
           </div>
           <div class="about__card reveal" data-rv style="--i:3" data-tilt>
             <span class="about__card-icon">✦</span>
@@ -203,7 +219,7 @@
           <button class="btn btn--primary contact__submit" type="submit" data-cursor="link" data-magnetic id="form-submit">
             Отправить <span class="btn__arrow">→</span>
           </button>
-          <p class="contact__sent" id="contact-sent" hidden>✦ Открываю почтовый клиент…</p>
+          <p class="contact__sent" id="contact-sent" role="status" aria-live="polite" aria-atomic="true" hidden>✦ Открываю почтовый клиент…</p>
         </form>
       </div>
     </section>
@@ -217,8 +233,8 @@
   <!-- ======== Project case overlay ======== -->
   <div class="case" id="case" aria-hidden="true">
     <div class="case__backdrop" id="case-backdrop"></div>
-    <article class="case__panel" id="case-panel" role="dialog" aria-modal="true">
-      <button class="case__close" id="case-close" aria-label="Close case" data-cursor="link">✕</button>
+    <article class="case__panel" id="case-panel" role="dialog" aria-modal="true" aria-labelledby="case-title" tabindex="-1">
+      <button class="case__close" id="case-close" aria-label="Закрыть описание проекта" data-cursor="link">✕</button>
       <div class="case__body" id="case-body"></div>
     </article>
   </div>
