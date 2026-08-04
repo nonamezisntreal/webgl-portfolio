@@ -46,6 +46,7 @@ The ledger consolidates the independent Review-03 artifacts without modifying th
 | PROD-WEBGL-02 | source review + viewport browser | adaptive quality | low-power/coarse/save-data/low FPS | Reduce cost without absolute performance claim | Width-only low-power decision and fixed DPR | Medium | Static quality heuristic | capability hints, bounded DPR scale and hysteresis | mobile/landscape/browser + build | RESOLVED |
 | PROD-UX-01 | viewport browser | header language target | touch activation | At least 44 CSS px | Approximately 28 px | Medium | Desktop-sized pill reused on touch | minimum 44px option sizing | tablet/mobile/landscape assertion | RESOLVED |
 | PROD-UX-02 | viewport browser | small-height hero | 844×390 landscape | Content remains readable without horizontal overflow | Oversized vertical composition | Low | Width-only responsive rules | bounded small-height media rule | `BROWSER-LANDSCAPE` | RESOLVED |
+| BUILD-REPRO-01 | two clean Windows and two clean Ubuntu/WSL builds | Vite/esbuild production output | Build the same commit with Bun 1.3.14 on Windows and Linux | Exact path/byte/SHA-256 manifest equality | Each platform was internally stable, but esbuild assigned different short identifier names and changed one runtime chunk/hash | High | Identifier renaming is platform-dependent even when syntax and whitespace minification are stable | Disable only `esbuild.minifyIdentifiers`; retain syntax/whitespace minification and repeat all four builds | four-way 38-file manifest comparison | RESOLVED |
 
 ## Confirmed-pass independent tests
 
