@@ -26,6 +26,8 @@ export interface NodePointer {
   index: number;
   x: number;
   y: number;
+  /** The scene pointed this node out on its own; the pointer is elsewhere. */
+  hint?: boolean;
 }
 
 export interface ExperienceOptions {
@@ -88,6 +90,7 @@ export class Experience {
   private pointerDragged = false;
   private hoverIndex = -1;
   private domHoverIndex = -1;
+  private hintIndex = -1;
   private focusIndex = -1;
   private focusHold = 0;
   private focusWeight = 0;
@@ -195,6 +198,7 @@ export class Experience {
 
     const scene = this.scenes[name as SceneSection];
     if (!scene) return;
+    this.hint(false);
     this.setDomHover(null);
     this.nodes.setSection(scene);
     this.clearHover();
@@ -232,6 +236,52 @@ export class Experience {
     const accent = index >= 0 ? nodes[index].color : undefined;
     this.postfx.setAtmosphere(accent ? this.atmosphereColor.set(accent) : null, this.reducedMotion);
     if (this.reducedMotion) this.renderOnce();
+  }
+
+  /**
+   * Point one on-screen node out for a moment so an idle visitor learns the
+   * layer is interactive. Reports whether anything was worth pointing at, and
+   * never fires while the visitor is already hovering something themselves.
+   */
+  hint(active: boolean): boolean {
+    if (this.disposed || this.contextLost) return false;
+
+    if (!active) {
+      if (this.hintIndex === -1) return false;
+      this.hintIndex = -1;
+      this.clearHover();
+      if (this.reducedMotion) this.renderOnce();
+      return false;
+    }
+
+    if (this.hoverIndex >= 0 || this.domHoverIndex >= 0) return false;
+    const nodes = this.nodes.activeNodes;
+    this.nodes.group.updateMatrixWorld();
+
+    const centreX = window.innerWidth / 2;
+    const centreY = window.innerHeight / 2;
+    let best = -1;
+    let bestDistance = Infinity;
+    for (let i = 0; i < nodes.length; i++) {
+      this.nodes.worldPosition(i, this.worldScratch);
+      if (!this.projectToScreen(this.worldScratch, this.screenScratch)) continue;
+      // a node sitting under a card or a button is a confusing thing to point at
+      if (this.isBlockedTarget(document.elementFromPoint(this.screenScratch.x, this.screenScratch.y))) continue;
+      const distance = Math.hypot(this.screenScratch.x - centreX, this.screenScratch.y - centreY);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = i;
+        this.hoverScreen.copy(this.screenScratch);
+      }
+    }
+    if (best === -1) return false;
+
+    this.hintIndex = best;
+    this.hoverIndex = best;
+    this.nodes.setHovered(best);
+    this.onNodeHover?.({ node: nodes[best], index: best, x: this.hoverScreen.x, y: this.hoverScreen.y, hint: true });
+    if (this.reducedMotion) this.renderOnce();
+    return true;
   }
 
   /** Drop any node focus and let the camera return to its scroll position. */
@@ -347,6 +397,8 @@ export class Experience {
 
   private onPointerDown(event: PointerEvent): void {
     if (this.disposed || this.contextLost || event.button !== 0 || !event.isPrimary) return;
+    // a hint must never be mistaken for a hovered node when the press resolves
+    this.hintIndex = -1;
     this.activePointerId = -1;
     this.pointerDragged = false;
     if (this.isBlockedTarget(event.target)) return;
@@ -467,6 +519,8 @@ export class Experience {
     const previous = this.hoverIndex;
     const nodes = this.nodes.activeNodes;
     if (!this.pointerSeen || nodes.length === 0 || this.isBlockedPoint()) {
+      // an idle hint keeps the highlight it asked for until it expires
+      if (this.hintIndex >= 0) return false;
       this.clearHover();
       return previous !== -1;
     }
@@ -486,10 +540,13 @@ export class Experience {
     }
 
     if (best === -1) {
+      if (this.hintIndex >= 0) return false;
       this.clearHover();
       return previous !== -1;
     }
 
+    // a real hover always wins over the hint
+    this.hintIndex = -1;
     this.hoverIndex = best;
     this.nodes.setHovered(best);
     this.onNodeHover?.({ node: nodes[best], index: best, x: this.hoverScreen.x, y: this.hoverScreen.y });
@@ -582,7 +639,7 @@ export class Experience {
     this.camera.lookAt(this.lookTarget);
 
     // the hovered node reaches toward the pointer, sampled at its own depth
-    if (this.hoverIndex >= 0 && this.domHoverIndex < 0) {
+    if (this.hoverIndex >= 0 && this.domHoverIndex < 0 && this.hintIndex < 0) {
       this.nodes.worldPosition(this.hoverIndex, this.worldScratch);
       this.pullScratch.set(this.mouse.x, this.mouse.y, 0.5).unproject(this.camera).sub(this.camera.position).normalize();
       this.pullPoint.copy(this.camera.position)

@@ -254,6 +254,23 @@ main {
   scale: 1;
 }
 
+/* the scene pointed this one out by itself: one pulse, then it lets go */
+.scene-tip--hint {
+  animation: scene-tip-hint 1.3s var(--ease-out);
+}
+
+@keyframes scene-tip-hint {
+  0% {
+    box-shadow: 0 0 0 0 rgba(103, 232, 249, 0.5);
+  }
+  40% {
+    box-shadow: 0 0 0 7px rgba(103, 232, 249, 0.12);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(103, 232, 249, 0);
+  }
+}
+
 .scene-tip::after {
   content: ' · ' attr(data-action);
   color: var(--accent-a);
@@ -423,6 +440,22 @@ body.is-ready .scene-guide:not(.scene-guide--hidden) {
   100% {
     box-shadow: 0 0 0 0 rgba(103, 232, 249, 0);
   }
+}
+
+/* signal travelling from a selected node to the element it points at */
+.scene-pulse {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 59;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(103, 232, 249, 0.95), rgba(103, 232, 249, 0) 68%);
+  box-shadow: 0 0 22px rgba(103, 232, 249, 0.5);
+  pointer-events: none;
+  opacity: 0;
 }
 
 /* card whose scene node is hovered right now — the reverse of the link above */

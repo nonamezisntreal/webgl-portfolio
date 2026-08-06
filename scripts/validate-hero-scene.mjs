@@ -112,7 +112,25 @@ assert(/addEventListener\('pointerover'/u.test(sceneNav) && /removeEventListener
 assert(/is-scene-linked/u.test(sceneNav), 'Scene hover must mark the card its node points at.');
 assert(/resolve to the same element/u.test(sceneNav), 'Two scene nodes must never claim one DOM element.');
 
-assert(!/scene-guide/u.test(indexHtml), 'Scene onboarding must be created at runtime without changing static index markup.');
+/* ── Idle demonstration and the signal a selection sends ── */
+
+assert(/hint\(active: boolean\): boolean/u.test(experience), 'The scene must be able to point one node out on its own.');
+assert(/hint: true/u.test(experience), 'The DOM bridge must be able to tell a hint from a real hover.');
+assert(/if \(this\.hintIndex >= 0\) return false;/u.test(experience), 'An idle hint must survive the frames where picking finds nothing.');
+const pointerDownBody = /private onPointerDown\([\s\S]*?\n {2}\}/u.exec(experience)?.[0] ?? '';
+assert(/this\.hintIndex = -1;/u.test(pointerDownBody), 'A press must never resolve an idle hint into a selection.');
+
+assert(/DEMO_DELAY_MS/u.test(sceneNav) && /DEMO_HOLD_MS/u.test(sceneNav), 'The idle demonstration lost its timing contract.');
+assert(/ACTIVITY_EVENTS/u.test(sceneNav) && /engaged = true/u.test(sceneNav), 'The demonstration must stand down once the visitor acts on their own.');
+assert(/window\.clearTimeout\(demoTimer\)/u.test(sceneNav), 'The demonstration must not outlive the scene it belongs to.');
+assert(/if \(!pointer\.hint\) cursor/u.test(sceneNav), 'A hint must not pretend the cursor is on the node.');
+assert(/scene-tip--hint/u.test(sceneNav), 'A hinted label must be distinguishable from a hovered one.');
+assert(/pulse\.animate\(/u.test(sceneNav) && /pulse\.className = 'scene-pulse'/u.test(sceneNav), 'A selection must send a visible signal to the element it chose.');
+const selectBody = /select\(pointer\) \{[\s\S]*?\n {4}\},/u.exec(sceneNav)?.[0] ?? '';
+assert(/if \(reducedMotion\)/u.test(selectBody) && /signal\(pointer, target\)/u.test(selectBody),
+  'The travelling signal is motion and must stay out of the reduced-motion path.');
+
+assert(!/scene-guide/u.test(indexHtml) && !/scene-pulse/u.test(indexHtml), 'Scene onboarding must be created at runtime without changing static index markup.');
 assert(/<canvas id="gl" aria-hidden="true">/u.test(indexHtml), 'The scene must remain a shortcut: the canvas stays out of the accessibility tree.');
 
 console.log('Validated hero scene contract: intrusive spherical comets absent; core, shader particles, rings, shards and bloom preserved; interactive node layer, picking, shockwave, DOM navigation bridge and two-way hover link intact.');

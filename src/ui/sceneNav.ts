@@ -3,6 +3,15 @@ import type { NodePointer } from '../webgl/Experience';
 import { scrollToElement } from './scroll';
 
 const HIGHLIGHT_MS = 1400;
+/** Idle window before the scene demonstrates itself once, and how long it holds. */
+const DEMO_DELAY_MS = 3000;
+const DEMO_HOLD_MS = 1300;
+/** Travel time of the signal from the node to the element it selected. */
+const PULSE_MS = 700;
+/** Where the smooth scroll parks the target: see scrollToElement. */
+const SCROLL_OFFSET = 90;
+/** Anything here means the visitor is exploring on their own already. */
+const ACTIVITY_EVENTS = ['pointerdown', 'wheel', 'keydown', 'touchstart'] as const;
 
 export interface SceneGuideCopy {
   title: string;
@@ -19,6 +28,18 @@ export interface SceneNav {
   select(pointer: NodePointer): void;
   setSection(name: string): void;
   dispose(): void;
+}
+
+export interface SceneNavOptions {
+  reducedMotion: boolean;
+  scenes: Record<SceneSection, SectionScene>;
+  guideCopy: SceneGuideCopy;
+  /** Let the scene drop its node focus, e.g. when Escape is pressed. */
+  onRelease: () => void;
+  /** Report the node a hovered card stands for, or null when the pointer leaves. */
+  onDomHover: (id: string | null) => void;
+  /** Ask the scene to point one node out; false means it had nothing to show. */
+  onHint: (active: boolean) => boolean;
 }
 
 interface SceneTargets {
@@ -71,14 +92,19 @@ function textSpan(className: string, text: string): HTMLSpanElement {
  * turns a selection into ordinary page navigation. The scene is a shortcut —
  * every destination stays reachable by scrolling and by keyboard.
  */
-export function initSceneNav(
-  reducedMotion: boolean,
-  onRelease: () => void,
-  scenes: Record<SceneSection, SectionScene>,
-  guideCopy: SceneGuideCopy,
-  onDomHover: (id: string | null) => void,
-): SceneNav {
+export function initSceneNav({
+  reducedMotion,
+  scenes,
+  guideCopy,
+  onRelease,
+  onDomHover,
+  onHint,
+}: SceneNavOptions): SceneNav {
   const targets = assertSceneTargets(scenes);
+
+  const pulse = document.createElement('div');
+  pulse.className = 'scene-pulse';
+  pulse.setAttribute('aria-hidden', 'true');
 
   const tip = document.createElement('div');
   tip.className = 'scene-tip';
@@ -99,12 +125,13 @@ export function initSceneNav(
   guideCopyRoot.append(guideTitle, guidePointer, guideTouch, guideAction);
   guide.append(guideBeacon, guideCopyRoot, guideArrow);
 
-  document.body.append(tip, guide);
+  document.body.append(tip, guide, pulse);
 
   const cursor = document.getElementById('cursor');
   const overlay = document.getElementById('case');
   let highlighted: HTMLElement | null = null;
   let highlightTimer = 0;
+  let highlightDelay = 0;
   let linked: HTMLElement | null = null;
   let linkedId: string | null = null;
   let label = '';
@@ -126,6 +153,7 @@ export function initSceneNav(
   };
 
   const clearHighlight = (): void => {
+    window.clearTimeout(highlightDelay);
     window.clearTimeout(highlightTimer);
     highlighted?.classList.remove('is-scene-target');
     highlighted = null;
@@ -138,8 +166,14 @@ export function initSceneNav(
     highlightTimer = window.setTimeout(clearHighlight, HIGHLIGHT_MS);
   };
 
+  /** The target announces itself when the signal reaches it, not before. */
+  const announce = (element: HTMLElement, delay: number): void => {
+    clearHighlight();
+    highlightDelay = window.setTimeout(() => highlight(element), delay);
+  };
+
   const hide = (): void => {
-    tip.classList.remove('scene-tip--visible');
+    tip.classList.remove('scene-tip--visible', 'scene-tip--hint');
     cursor?.classList.remove('cursor--node');
     setLinked(null);
     resetGuide();
@@ -157,6 +191,59 @@ export function initSceneNav(
     onDomHover(id);
   };
   document.addEventListener('pointerover', handlePointerOver, { passive: true });
+
+  /**
+   * Send a visible signal from the node to what it selected, so the scroll
+   * reads as a consequence rather than as a jump. The destination is where the
+   * smooth scroll will park the target, not where the target sits right now.
+   */
+  const signal = (from: NodePointer, target: HTMLElement): void => {
+    const rect = target.getBoundingClientRect();
+    const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    const parked = Math.min(Math.max(rect.top + window.scrollY - SCROLL_OFFSET, 0), maxScroll);
+    const shift = parked - window.scrollY;
+    const toX = rect.left + rect.width / 2;
+    const toY = rect.top + rect.height / 2 - shift;
+    const at = (x: number, y: number, scale: number): string =>
+      `translate(${Math.round(x)}px, ${Math.round(y)}px) scale(${scale})`;
+
+    pulse.animate(
+      [
+        { transform: at(from.x, from.y, 0.5), opacity: 0 },
+        { transform: at(from.x + (toX - from.x) * 0.25, from.y + (toY - from.y) * 0.25, 1), opacity: 1, offset: 0.25 },
+        { transform: at(toX, toY, 1.4), opacity: 0 },
+      ],
+      { duration: PULSE_MS, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' },
+    );
+  };
+
+  /**
+   * One-time demonstration: a visitor who stays idle is shown that the layer
+   * responds, once. Nothing is clicked, scrolled or faked on their behalf.
+   */
+  let demoTimer = 0;
+  let demoHold = 0;
+  let engaged = false;
+
+  const stopDemo = (): void => {
+    window.clearTimeout(demoTimer);
+    window.clearTimeout(demoHold);
+    onHint(false);
+  };
+
+  const handleActivity = (): void => {
+    if (engaged) return;
+    engaged = true;
+    stopDemo();
+    for (const type of ACTIVITY_EVENTS) window.removeEventListener(type, handleActivity);
+  };
+  for (const type of ACTIVITY_EVENTS) window.addEventListener(type, handleActivity, { passive: true });
+
+  demoTimer = window.setTimeout(() => {
+    if (disposed || engaged || activeSection !== 'hero') return;
+    if (!onHint(true)) return;
+    demoHold = window.setTimeout(() => onHint(false), DEMO_HOLD_MS);
+  }, DEMO_DELAY_MS);
 
   const handleKeydown = (event: KeyboardEvent): void => {
     if (event.key !== 'Escape') return;
@@ -184,7 +271,9 @@ export function initSceneNav(
       const y = Math.max(pointer.y, 72);
       tip.style.transform = `translate(${Math.round(x - halfWidth)}px, ${Math.round(y)}px)`;
       tip.classList.add('scene-tip--visible');
-      cursor?.classList.add('cursor--node');
+      // a hint is not a hover: the real cursor is elsewhere and must not react
+      tip.classList.toggle('scene-tip--hint', pointer.hint === true);
+      if (!pointer.hint) cursor?.classList.add('cursor--node');
       setLinked(targets.byId.get(pointer.node.id) ?? null);
 
       if (activeSection === 'hero') {
@@ -212,7 +301,13 @@ export function initSceneNav(
       }
 
       scrollToElement(target, reducedMotion);
-      highlight(target);
+      if (reducedMotion) {
+        // the causal link stays, the travelling light does not
+        highlight(target);
+        return;
+      }
+      signal(pointer, target);
+      announce(target, PULSE_MS * 0.75);
     },
 
     setSection(name) {
@@ -229,10 +324,14 @@ export function initSceneNav(
       disposed = true;
       document.removeEventListener('keydown', handleKeydown);
       document.removeEventListener('pointerover', handlePointerOver);
+      for (const type of ACTIVITY_EVENTS) window.removeEventListener(type, handleActivity);
+      window.clearTimeout(demoTimer);
+      window.clearTimeout(demoHold);
       clearHighlight();
       hide();
       tip.remove();
       guide.remove();
+      pulse.remove();
     },
   };
 }
