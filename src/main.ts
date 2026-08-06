@@ -140,6 +140,7 @@ async function boot(): Promise<void> {
   try {
     let nav: SceneNav | undefined;
     const scenes = sectionScenes(locale);
+    const sceneGuide = getCopy(locale).hero.sceneGuide;
     const experience = new Experience({
       canvas,
       reducedMotion,
@@ -151,7 +152,7 @@ async function boot(): Promise<void> {
       onNodeSelect: (pointer) => nav?.select(pointer),
     });
     try {
-      nav = initSceneNav(reducedMotion, () => experience.releaseFocus(), scenes);
+      nav = initSceneNav(reducedMotion, () => experience.releaseFocus(), scenes, sceneGuide);
     } catch (error) {
       experience.dispose();
       throw error;
@@ -163,7 +164,10 @@ async function boot(): Promise<void> {
 
     initScroll(reducedMotion, {
       onProgress: (p) => experience.setScroll(p),
-      onSection: (name) => experience.setSection(name),
+      onSection: (name) => {
+        experience.setSection(name);
+        nav?.setSection(name);
+      },
     });
 
     if (reducedMotion) experience.renderOnce();

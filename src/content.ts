@@ -84,6 +84,15 @@ export const copy = {
       secondary: 'Связаться',
       scroll: 'скролль, чтобы исследовать',
       meta: 'UTC+05 · удалённо',
+      sceneGuide: {
+        title: 'Интерактивный фон',
+        pointer: 'Наведи на светящийся ромб и нажми',
+        touch: 'Коснись светящегося ромба',
+        action: 'Он откроет связанный раздел',
+        hover: 'Нажми, чтобы открыть',
+        selected: 'Открываю',
+        tip: 'нажми',
+      },
     },
     about: {
       title: 'Обо мне',
@@ -295,6 +304,15 @@ export const copy = {
       secondary: 'Get in touch',
       scroll: 'scroll to explore',
       meta: 'UTC+05 · remote-friendly',
+      sceneGuide: {
+        title: 'Interactive background',
+        pointer: 'Hover a glowing diamond and click',
+        touch: 'Tap a glowing diamond',
+        action: 'It opens the related section',
+        hover: 'Click to open',
+        selected: 'Opening',
+        tip: 'click',
+      },
     },
     about: {
       title: 'About',

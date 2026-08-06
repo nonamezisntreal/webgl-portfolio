@@ -90,10 +90,10 @@ export class Nodes {
 
   constructor(colorA: THREE.Color, colorB: THREE.Color, capacity: number) {
     this.mesh = new THREE.InstancedMesh(
-      new THREE.OctahedronGeometry(0.16, 0),
+      new THREE.OctahedronGeometry(0.2, 0),
       new THREE.MeshBasicMaterial({
         transparent: true,
-        opacity: 0.8,
+        opacity: 0.95,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       }),
@@ -149,7 +149,7 @@ export class Nodes {
       }
 
       layout(scene.formation, i, this.visible.length, node.weight, state.target);
-      state.targetScale = 0.72 + node.weight * 0.55;
+      state.targetScale = 0.78 + node.weight * 0.58;
       if (node.color) state.restColor.set(node.color);
       else state.restColor.copy(this.gradient[i]);
     }
@@ -209,7 +209,7 @@ export class Nodes {
       this.mesh.setMatrixAt(i, this.dummy.matrix);
 
       // idle nodes stay subdued so hover reads as a real affordance
-      const glow = 0.6 + state.hover * 1.5 + selectedPulse * 2;
+      const glow = 0.75 + state.hover * 1.65 + selectedPulse * 2;
       state.color.copy(state.restColor).multiplyScalar(glow);
       this.mesh.setColorAt(i, state.color);
     }

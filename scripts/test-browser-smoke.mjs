@@ -264,6 +264,10 @@ async function pageContract(cdp) {
     const active = document.querySelector('[data-lang-pill][aria-current="page"]');
     const inactive = document.querySelector('[data-lang-link]');
     const inactiveRect = inactive?.getBoundingClientRect();
+    const sceneGuide = document.querySelector('.scene-guide');
+    const sceneGuideStyle = sceneGuide ? getComputedStyle(sceneGuide) : null;
+    const sceneGuidePointer = document.querySelector('.scene-guide__instruction--pointer');
+    const sceneGuideTouch = document.querySelector('.scene-guide__instruction--touch');
     return {
       title: document.title,
       lang: document.documentElement.lang,
@@ -296,6 +300,16 @@ async function pageContract(cdp) {
       closeLabel: document.getElementById('case-close')?.getAttribute('aria-label'),
       contactStatusRole: document.getElementById('contact-sent')?.getAttribute('role'),
       webglFallback: document.documentElement.classList.contains('webgl-fallback'),
+      sceneGuide: {
+        exists: Boolean(sceneGuide),
+        visible: Boolean(sceneGuideStyle && sceneGuideStyle.visibility !== 'hidden' && Number(sceneGuideStyle.opacity) > 0.5),
+        title: document.querySelector('.scene-guide__title')?.textContent?.trim(),
+        pointer: sceneGuidePointer?.textContent?.trim(),
+        touch: sceneGuideTouch?.textContent?.trim(),
+        action: document.querySelector('.scene-guide__action')?.textContent?.trim(),
+        pointerDisplay: sceneGuidePointer ? getComputedStyle(sceneGuidePointer).display : null,
+        touchDisplay: sceneGuideTouch ? getComputedStyle(sceneGuideTouch).display : null,
+      },
     };
   })()`);
 }
@@ -414,6 +428,9 @@ async function runPrimary(origin, results) {
     assert(desktop.horizontalOverflow <= 1, 'Desktop page has horizontal overflow.');
     assert(desktop.canvasExists && desktop.canvasHidden === 'true' && desktop.moduleCount === 1, 'Russian homepage shared application runtime is incomplete.');
     assert(desktop.heroEyebrow === 'доступен для проектов', 'Russian homepage primary shell is not localized.');
+    assert(desktop.sceneGuide.exists && desktop.sceneGuide.visible, 'Russian scene onboarding guide is not visible.');
+    assert(desktop.sceneGuide.title === 'Интерактивный фон' && desktop.sceneGuide.pointer === 'Наведи на светящийся ромб и нажми', 'Russian scene onboarding guide is not localized.');
+    assert(desktop.sceneGuide.pointerDisplay !== 'none' && desktop.sceneGuide.touchDisplay === 'none', 'Desktop scene onboarding shows the wrong input instruction.');
     assert(desktop.wrapperRole === 'group' && desktop.wrapperHref === null, 'Russian language switcher wrapper is not semantic.');
     assert(desktop.activeLocale === 'ru' && desktop.activeTag === 'span' && desktop.activeHref === null && desktop.activeTabIndex === null && desktop.activeAriaCurrent === 'page', 'Russian homepage active locale must be an inert span.');
     assert(desktop.inactiveLocale === 'en' && desktop.inactiveTag === 'a' && desktop.inactiveHref === `${basePath}en/` && desktop.inactiveHreflang === 'en', 'Russian homepage inactive EN link is incorrect.');
@@ -432,6 +449,9 @@ async function runPrimary(origin, results) {
     assert(english.mainTextLength > 1000 && english.h1Count === 1, 'English homepage primary content is incomplete.');
     assert(english.canvasExists && english.canvasHidden === 'true' && english.moduleCount === 1, 'English homepage is missing the shared application runtime.');
     assert(english.heroEyebrow === 'available for projects' && english.navigationLabel === 'Primary navigation' && english.closeLabel === 'Close project details', 'English homepage primary shell or accessible labels are not localized.');
+    assert(english.sceneGuide.exists && english.sceneGuide.visible, 'English scene onboarding guide is not visible.');
+    assert(english.sceneGuide.title === 'Interactive background' && english.sceneGuide.pointer === 'Hover a glowing diamond and click', 'English scene onboarding guide is not localized.');
+    assert(english.sceneGuide.pointerDisplay !== 'none' && english.sceneGuide.touchDisplay === 'none', 'English desktop onboarding shows the wrong input instruction.');
     assert(english.wrapperRole === 'group' && english.wrapperHref === null, 'English language switcher wrapper is not semantic.');
     assert(english.activeLocale === 'en' && english.activeTag === 'span' && english.activeHref === null && english.activeTabIndex === null && english.activeAriaCurrent === 'page', 'English homepage active locale must be an inert span.');
     assert(english.inactiveLocale === 'ru' && english.inactiveTag === 'a' && english.inactiveHref === basePath && english.inactiveHreflang === 'ru', 'English homepage inactive RU link is incorrect.');
@@ -473,6 +493,8 @@ async function runPrimary(origin, results) {
       assert(contract.horizontalOverflow <= 1, `${viewport.id} has horizontal overflow.`);
       assert(contract.ready && contract.mainTextLength > 1000, `${viewport.id} did not render primary content.`);
       assert(contract.inactiveTarget && contract.inactiveTarget.width >= 44 && contract.inactiveTarget.height >= 44, `${viewport.id} inactive locale touch target is below 44×44px.`);
+      assert(contract.sceneGuide.visible && contract.sceneGuide.title === 'Интерактивный фон', `${viewport.id} scene onboarding guide is missing.`);
+      assert(contract.sceneGuide.pointerDisplay === 'none' && contract.sceneGuide.touchDisplay !== 'none', `${viewport.id} does not show the touch-specific scene instruction.`);
       await cdp.screenshot(resolve(artifactDir, viewport.screenshot));
       results.push({ id: viewport.id, status: 'PASS', details: contract });
     }
@@ -503,6 +525,13 @@ async function runPrimary(origin, results) {
     const tapNode = await discoverSceneNodes(cdp, 390, 844, [swipeLabel]);
     const tapPoint = tapNode[swipeLabel];
     assert(tapPoint, 'The mobile scene node disappeared before the tap regression test.');
+    await movePointer(cdp, tapPoint.x, tapPoint.y);
+    await sleep(80);
+    const guideHover = await cdp.evaluate(`(() => ({
+      active: document.querySelector('.scene-guide')?.classList.contains('scene-guide--active'),
+      action: document.querySelector('.scene-guide__action')?.textContent?.trim(),
+    }))()`);
+    assert(guideHover.active && guideHover.action?.includes(swipeLabel), 'Scene onboarding did not identify the hovered node and its action.');
     await dispatchTouch(cdp, 'touchStart', [tapPoint]);
     await dispatchTouch(cdp, 'touchEnd', []);
     await sleep(300);

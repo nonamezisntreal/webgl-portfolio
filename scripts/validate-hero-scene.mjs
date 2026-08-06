@@ -41,6 +41,7 @@ assert(/this\.scene\.add\(this\.core\.group, this\.particles\.group, this\.rings
 /* ── Interactive layer: the scene must stay a navigable content surface ── */
 
 assert(/new THREE\.InstancedMesh\(/u.test(nodes), 'Interactive node layer must remain a single instanced draw call.');
+assert(/new THREE\.OctahedronGeometry\(0\.2, 0\)/u.test(nodes), 'Interactive nodes must remain visually distinct from decorative particles.');
 const formations = ['swarm', 'pillars', 'ring', 'ellipse', 'spiral', 'lattice', 'collapse'];
 for (const formation of formations) {
   assert(new RegExp(`case '${formation}'`, 'u').test(nodes), `Node formation '${formation}' is missing.`);
@@ -91,8 +92,12 @@ assert(/this\.core\.update\(time, delta/u.test(experience)
 
 assert(/scrollToElement\(/u.test(sceneNav), 'Scene selection must resolve to ordinary page navigation.');
 assert(/assertSceneTargets\(/u.test(sceneNav), 'Scene navigation must fail closed when a DOM target is missing or ambiguous.');
-assert(/dispose\(\)/u.test(sceneNav) && /removeEventListener\('keydown'/u.test(sceneNav), 'Scene navigation must clean up its global listener and tooltip.');
+assert(/interface SceneGuideCopy/u.test(sceneNav) && /guideCopy: SceneGuideCopy/u.test(sceneNav), 'Scene onboarding copy must be localized through the content registry.');
+assert(/guide\.className = 'scene-guide'/u.test(sceneNav) && /tip\.dataset\.action = guideCopy\.tip/u.test(sceneNav), 'Scene onboarding and actionable hover labels are missing.');
+assert(/setSection\(name: string\): void/u.test(sceneNav) && /scene-guide--hidden/u.test(sceneNav), 'Scene onboarding must only remain visible in the hero section.');
+assert(/dispose\(\)/u.test(sceneNav) && /removeEventListener\('keydown'/u.test(sceneNav) && /guide\.remove\(\)/u.test(sceneNav), 'Scene navigation must clean up its global listener, tooltip and onboarding guide.');
 assert(/setAttribute\('aria-hidden', 'true'\)/u.test(sceneNav), 'Scene node label must stay hidden from assistive technology.');
+assert(!/scene-guide/u.test(indexHtml), 'Scene onboarding must be created at runtime without changing static index markup.');
 assert(/<canvas id="gl" aria-hidden="true">/u.test(indexHtml), 'The scene must remain a shortcut: the canvas stays out of the accessibility tree.');
 
 console.log('Validated hero scene contract: intrusive spherical comets absent; core, shader particles, rings, shards and bloom preserved; interactive node layer, picking, shockwave and DOM navigation bridge intact.');

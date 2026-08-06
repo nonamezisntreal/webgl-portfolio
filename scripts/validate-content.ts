@@ -34,6 +34,9 @@ const caseIds = new Set(casePages.map((item) => item.id));
 
 for (const locale of locales) {
   assert(copy[locale].projects.length > 0, `No projects for locale ${locale}.`);
+  for (const [field, value] of Object.entries(copy[locale].hero.sceneGuide)) {
+    assert(value.trim().length >= 4, `Hero scene guide ${field}/${locale} is too short.`);
+  }
   assertUnique(copy[locale].projects.map((item) => item.id), `Project IDs (${locale})`);
 
   for (const descriptor of servicePages) {
