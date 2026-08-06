@@ -145,6 +145,10 @@ async function withHeroSourceMutation(mutate) {
   const root = await mkdtemp(resolve(tmpdir(), 'webgl-hero-source-'));
   try {
     await cp(resolve(projectRoot, 'src/webgl'), resolve(root, 'src/webgl'), { recursive: true });
+    await mkdir(resolve(root, 'src/ui'), { recursive: true });
+    await cp(resolve(projectRoot, 'src/scene-nodes.ts'), resolve(root, 'src/scene-nodes.ts'));
+    await cp(resolve(projectRoot, 'src/ui/sceneNav.ts'), resolve(root, 'src/ui/sceneNav.ts'));
+    await cp(resolve(projectRoot, 'index.html'), resolve(root, 'index.html'));
     await mutate(root);
     return nodeResult(validators.hero, { PROJECT_ROOT: root });
   } finally {

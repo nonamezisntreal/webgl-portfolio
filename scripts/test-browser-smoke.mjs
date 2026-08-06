@@ -310,7 +310,70 @@ async function activeLocaleClickKeepsPath(cdp) {
 
 async function setViewport(cdp, width, height, mobile = false) {
   await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: mobile ? 2 : 1, mobile });
+  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: mobile, maxTouchPoints: 1 });
 }
+
+async function movePointer(cdp, x, y) {
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none', buttons: 0, pointerType: 'mouse' });
+}
+
+async function discoverSceneNodes(cdp, width, height, expectedLabels) {
+  const expected = new Set(expectedLabels);
+  const found = new Map();
+  for (const step of [28, 18]) {
+    for (let y = 56; y <= height - 24 && found.size < expected.size; y += step) {
+      for (let x = 12; x <= width - 12 && found.size < expected.size; x += step) {
+        await movePointer(cdp, x, y);
+        await sleep(20);
+        const hit = await cdp.evaluate(`(() => {
+          const tip = document.querySelector('.scene-tip');
+          if (!tip?.classList.contains('scene-tip--visible')) return null;
+          const label = tip.textContent?.trim();
+          const match = tip.style.transform.match(/translate\\((-?\\d+)px, (-?\\d+)px\\)/);
+          if (!label || !match) return null;
+          return { label, x: Number(match[1]) + tip.offsetWidth / 2, y: Number(match[2]) };
+        })()`);
+        if (hit && expected.has(hit.label) && !found.has(hit.label)) found.set(hit.label, { x: hit.x, y: hit.y });
+      }
+    }
+    if (found.size === expected.size) break;
+  }
+  return Object.fromEntries(found);
+}
+
+async function dispatchTouch(cdp, type, points) {
+  await cdp.send('Input.dispatchTouchEvent', {
+    type,
+    touchPoints: points.map((point, index) => ({
+      x: point.x,
+      y: point.y,
+      radiusX: 4,
+      radiusY: 4,
+      force: 1,
+      id: index + 1,
+    })),
+  });
+}
+
+const drawCounterSource = `(() => {
+  let draws = 0;
+  Object.defineProperty(window, '__sceneDrawCalls', { configurable: true, get: () => draws });
+  const wrap = (prototype, name) => {
+    if (!prototype) return;
+    const original = prototype[name];
+    if (typeof original !== 'function' || original.__sceneCounted) return;
+    const counted = function (...args) {
+      draws += 1;
+      return original.apply(this, args);
+    };
+    Object.defineProperty(counted, '__sceneCounted', { value: true });
+    prototype[name] = counted;
+  };
+  for (const name of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced']) {
+    wrap(globalThis.WebGLRenderingContext?.prototype, name);
+    wrap(globalThis.WebGL2RenderingContext?.prototype, name);
+  }
+})();`;
 
 function collectDiagnostics(cdp, origin) {
   const consoleErrors = [];
@@ -414,6 +477,42 @@ async function runPrimary(origin, results) {
       results.push({ id: viewport.id, status: 'PASS', details: contract });
     }
 
+    await setViewport(cdp, 390, 844, true);
+    await cdp.navigate(`${origin}${basePath}`);
+    const expectedStackLabels = await cdp.evaluate(`[
+      ...document.querySelectorAll('[data-scene-target^="stack-"]'),
+    ].map((element) => element.textContent?.trim()).filter(Boolean)`);
+    const mobileNodes = await discoverSceneNodes(cdp, 390, 844, expectedStackLabels);
+    assert(Object.keys(mobileNodes).length === expectedStackLabels.length, `Mobile scene exposed ${Object.keys(mobileNodes).length}/${expectedStackLabels.length} stack nodes.`);
+
+    const swipeLabel = expectedStackLabels.find((label) => mobileNodes[label]);
+    assert(swipeLabel, 'No mobile scene node was available for the gesture regression test.');
+    const swipePoint = mobileNodes[swipeLabel];
+    const swipeDelta = swipePoint.y < 700 ? 96 : -96;
+    await dispatchTouch(cdp, 'touchStart', [swipePoint]);
+    await dispatchTouch(cdp, 'touchMove', [{ x: swipePoint.x, y: swipePoint.y + swipeDelta }]);
+    await dispatchTouch(cdp, 'touchEnd', []);
+    await sleep(400);
+    const afterSwipe = await cdp.evaluate(`(() => ({
+      highlighted: document.querySelectorAll('.is-scene-target').length,
+      caseOpen: document.getElementById('case')?.classList.contains('case--open'),
+    }))()`);
+    assert(afterSwipe.highlighted === 0 && !afterSwipe.caseOpen, 'A swipe gesture activated a scene node.');
+
+    await cdp.navigate(`${origin}${basePath}`);
+    const tapNode = await discoverSceneNodes(cdp, 390, 844, [swipeLabel]);
+    const tapPoint = tapNode[swipeLabel];
+    assert(tapPoint, 'The mobile scene node disappeared before the tap regression test.');
+    await dispatchTouch(cdp, 'touchStart', [tapPoint]);
+    await dispatchTouch(cdp, 'touchEnd', []);
+    await sleep(300);
+    const afterTap = await cdp.evaluate(`(() => ({
+      highlighted: document.querySelectorAll('.is-scene-target').length,
+      scrollY: window.scrollY,
+    }))()`);
+    assert(afterTap.highlighted === 1, 'A valid tap did not activate the scene node.');
+    results.push({ id: 'BROWSER-MOBILE-SCENE-GESTURES', status: 'PASS', details: { expected: expectedStackLabels.length, discovered: Object.keys(mobileNodes).length, swipeLabel, afterSwipe, afterTap } });
+
     await setViewport(cdp, 1440, 900);
     await cdp.navigate(`${origin}${basePath}`);
     await cdp.evaluate('document.body.focus()');
@@ -440,6 +539,7 @@ async function runPrimary(origin, results) {
     assert(dialogClosed.closed && dialogClosed.restored && !dialogClosed.mainInert, 'Dialog close did not restore focus/background state.');
     results.push({ id: 'BROWSER-KEYBOARD-DIALOG', status: 'PASS', details: { firstFocus, focusOutline, dialogOpen, dialogClosed } });
 
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: drawCounterSource });
     await cdp.send('Emulation.setEmulatedMedia', { media: '', features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
     await cdp.navigate(`${origin}${basePath}`);
     const reduced = await cdp.evaluate(`(() => ({
@@ -447,10 +547,31 @@ async function runPrimary(origin, results) {
       ready: document.body.classList.contains('is-ready'),
       revealOpacity: getComputedStyle(document.querySelector('.reveal')).opacity,
       animationDuration: getComputedStyle(document.querySelector('.loader__ring') || document.body).animationDuration,
+      drawCalls: window.__sceneDrawCalls,
     }))()`);
     assert(reduced.matches && reduced.ready && reduced.revealOpacity === '1', 'Reduced-motion contract failed.');
+    assert(reduced.drawCalls > 0, 'Reduced-motion draw-call instrumentation did not observe the static render.');
+
+    const reducedLabel = await cdp.evaluate(`document.querySelector('[data-scene-target^="stack-"]')?.textContent?.trim()`);
+    const reducedNode = await discoverSceneNodes(cdp, 1440, 900, [reducedLabel]);
+    const reducedPoint = reducedNode[reducedLabel];
+    assert(reducedPoint, 'Reduced-motion scene node was not pickable in its static final formation.');
+    await movePointer(cdp, reducedPoint.x, reducedPoint.y);
+    await sleep(80);
+    const drawsBeforeRepeatedMove = await cdp.evaluate('window.__sceneDrawCalls');
+    for (let index = 0; index < 20; index += 1) {
+      await movePointer(cdp, reducedPoint.x + (index % 2), reducedPoint.y);
+    }
+    await sleep(80);
+    const repeatedMove = await cdp.evaluate(`(() => ({
+      drawCalls: window.__sceneDrawCalls,
+      label: document.querySelector('.scene-tip--visible')?.textContent?.trim(),
+    }))()`);
+    assert(repeatedMove.label === reducedLabel, 'Reduced-motion hover did not remain on the same node.');
+    assert(repeatedMove.drawCalls === drawsBeforeRepeatedMove, 'Reduced-motion rendered a full WebGL frame for unchanged hover pointer moves.');
+
     await cdp.screenshot(resolve(artifactDir, 'reduced-motion.png'));
-    results.push({ id: 'BROWSER-REDUCED-MOTION', status: 'PASS', details: reduced });
+    results.push({ id: 'BROWSER-REDUCED-MOTION', status: 'PASS', details: { ...reduced, reducedLabel, drawsBeforeRepeatedMove, repeatedMove } });
     await cdp.send('Emulation.setEmulatedMedia', { media: '', features: [] });
 
     await cdp.navigate(`${origin}${basePath}`);

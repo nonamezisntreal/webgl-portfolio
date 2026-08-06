@@ -13,7 +13,6 @@ export class Core {
   private orbMaterial: THREE.ShaderMaterial;
   private haloMaterial: THREE.ShaderMaterial;
   private halo: THREE.Mesh;
-  private lastTime = 0;
   private velocity = 0;
 
   constructor(colorA: THREE.Color, colorB: THREE.Color) {
@@ -88,10 +87,8 @@ export class Core {
    * @param mouse  normalized mouse (-1..1)
    * @param scroll page scroll progress (0..1)
    */
-  update(time: number, mouse: THREE.Vector2, scroll: number): void {
+  update(time: number, delta: number, mouse: THREE.Vector2, scroll: number): void {
     const u = this.orbMaterial.uniforms;
-    const delta = Math.min(Math.max(time - this.lastTime, 0), 0.1);
-    this.lastTime = time;
 
     u.uTime.value = time;
     u.uVelocity.value = THREE.MathUtils.lerp(u.uVelocity.value, this.velocity, 0.12);

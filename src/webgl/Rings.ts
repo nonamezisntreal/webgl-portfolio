@@ -11,7 +11,6 @@ export class Rings {
   private ringOpacity: number[] = [];
   private shards: THREE.Mesh[] = [];
   private shardData: { radius: number; speed: number; y: number; phase: number; rot: number }[] = [];
-  private lastTime = 0;
   private pulseValue = 0;
 
   constructor(colorA: THREE.Color, colorB: THREE.Color) {
@@ -70,9 +69,7 @@ export class Rings {
     this.pulseValue = Math.min(1, strength);
   }
 
-  update(time: number, mouse: THREE.Vector2, scroll: number): void {
-    const delta = Math.min(Math.max(time - this.lastTime, 0), 0.1);
-    this.lastTime = time;
+  update(time: number, delta: number, mouse: THREE.Vector2, scroll: number): void {
     this.pulseValue *= Math.exp(-delta * 2.4);
 
     for (let i = 0; i < this.rings.length; i++) {

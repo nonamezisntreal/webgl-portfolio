@@ -16,7 +16,6 @@ export class PostFX {
   private baseBloom: number;
   private bloomScale = 1;
   private flashValue = 0;
-  private lastTime = 0;
 
   constructor(
     renderer: THREE.WebGLRenderer,
@@ -64,9 +63,7 @@ export class PostFX {
     this.composer.setPixelRatio(pixelRatio);
   }
 
-  render(time: number): void {
-    const delta = Math.min(Math.max(time - this.lastTime, 0), 0.1);
-    this.lastTime = time;
+  render(time: number, delta: number): void {
     this.flashValue *= Math.exp(-delta * 3.2);
 
     this.bloom.strength = this.baseBloom * this.bloomScale * (1 + this.flashValue * 1.6);

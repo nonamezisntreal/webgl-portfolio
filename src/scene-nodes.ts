@@ -47,16 +47,20 @@ export function sectionScenes(locale: Locale): Record<SceneSection, SectionScene
       nodes: stack.map((tech, index) => ({
         id: `stack-${index}`,
         label: tech,
-        target: `#about-stack .chip:nth-child(${index + 1})`,
+        target: `[data-scene-target="stack-${index}"]`,
         weight: 0.6,
       })),
     },
     about: {
       formation: 'pillars',
-      nodes: [cards.performance, cards.creativity, cards.architecture].map((card, index) => ({
-        id: `about-${index}`,
+      nodes: [
+        { id: 'performance', card: cards.performance },
+        { id: 'creativity', card: cards.creativity },
+        { id: 'architecture', card: cards.architecture },
+      ].map(({ id, card }) => ({
+        id: `about-${id}`,
         label: card.title,
-        target: `.about__cards .about__card:nth-child(${index + 1})`,
+        target: `[data-scene-target="about-${id}"]`,
         weight: 1,
       })),
     },
@@ -65,7 +69,7 @@ export function sectionScenes(locale: Locale): Record<SceneSection, SectionScene
       nodes: services.map((service, index) => ({
         id: `service-${index}`,
         label: service.title,
-        target: `#services-grid .service:nth-child(${index + 1})`,
+        target: `[data-scene-target="service-${index}"]`,
         weight: 0.85,
       })),
     },
@@ -85,7 +89,7 @@ export function sectionScenes(locale: Locale): Record<SceneSection, SectionScene
       nodes: process.map((step, index) => ({
         id: `process-${index}`,
         label: `${step.num} · ${step.title}`,
-        target: `#process-grid .step:nth-child(${index + 1})`,
+        target: `[data-scene-target="process-${index}"]`,
         weight: 0.8,
       })),
     },
@@ -94,7 +98,7 @@ export function sectionScenes(locale: Locale): Record<SceneSection, SectionScene
       nodes: skills.map((skill, index) => ({
         id: `skill-${index}`,
         label: `${skill.name} · ${skill.level[locale]}`,
-        target: `#skills-grid .skill:nth-child(${index + 1})`,
+        target: `[data-scene-target="skill-${index}"]`,
         weight: skillWeights[skill.level.en] ?? 0.5,
       })),
     },

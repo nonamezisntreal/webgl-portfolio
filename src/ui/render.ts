@@ -4,6 +4,7 @@ import { siteConfig } from '../static-pages';
 
 /** Inject all dynamic content (stack chips, project cards, skills, links) into the DOM. */
 export function renderContent(locale: Locale): void {
+  bindStaticSceneTargets();
   renderStack();
   renderServices(locale);
   renderProjects(locale);
@@ -15,11 +16,23 @@ export function renderContent(locale: Locale): void {
   if (year) year.textContent = siteConfig.contentUpdatedAt.slice(0, 4);
 }
 
+function bindStaticSceneTargets(): void {
+  const targets = [
+    ['about-card-performance-title', 'about-performance'],
+    ['about-card-creativity-title', 'about-creativity'],
+    ['about-card-architecture-title', 'about-architecture'],
+  ] as const;
+
+  for (const [titleId, targetId] of targets) {
+    document.getElementById(titleId)?.closest<HTMLElement>('.about__card')?.setAttribute('data-scene-target', targetId);
+  }
+}
+
 function renderStack(): void {
   const host = document.getElementById('about-stack');
   if (!host) return;
   host.innerHTML = stack
-    .map((tech, i) => `<span class="chip" style="--i:${i}">${tech}</span>`)
+    .map((tech, i) => `<span class="chip" data-scene-target="stack-${i}" style="--i:${i}">${tech}</span>`)
     .join('');
 }
 
@@ -30,7 +43,7 @@ function renderServices(locale: Locale): void {
     .services.map((service, index) => {
       const text = index === 1 ? publicClaims.webglServiceSummary[locale] : service.text;
       return `
-  <div class="service reveal in" data-rv data-tilt style="--i:${index + 1}">
+  <div class="service reveal in" data-rv data-tilt data-scene-target="service-${index}" style="--i:${index + 1}">
     <span class="service__icon" aria-hidden="true">${service.icon}</span>
     <h3 class="service__title">${service.title}</h3>
     <p class="service__text">${text}</p>
@@ -45,7 +58,7 @@ function renderProcess(locale: Locale): void {
   host.innerHTML = getCopy(locale)
     .process.map(
       (process, index) => `
-  <div class="step reveal in" data-rv style="--i:${index + 1}">
+  <div class="step reveal in" data-rv data-scene-target="process-${index}" style="--i:${index + 1}">
     <span class="step__num">${process.num}</span>
     <h3 class="step__title">${process.title}</h3>
     <p class="step__text">${process.text}</p>
@@ -98,7 +111,7 @@ function renderSkills(locale: Locale): void {
   host.innerHTML = skills
     .map(
       (skill, index) => `
-  <div class="skill reveal in" data-rv style="--i:${(index % 4) + 1}">
+  <div class="skill reveal in" data-rv data-scene-target="skill-${index}" style="--i:${(index % 4) + 1}">
     <span class="skill__icon" aria-hidden="true">${skill.icon}</span>
     <span class="skill__name">${skill.name}</span>
     <span class="skill__level">${skill.level[locale]}</span>

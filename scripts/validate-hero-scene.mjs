@@ -46,16 +46,26 @@ for (const formation of formations) {
   assert(new RegExp(`case '${formation}'`, 'u').test(nodes), `Node formation '${formation}' is missing.`);
 }
 assert(/worldPosition\(/u.test(nodes), 'Node world positions must stay resolvable for picking and focus.');
+assert(/scene\.nodes\.length > this\.states\.length/u.test(nodes), 'Node capacity overflow must fail closed.');
+assert(!/scene\.nodes\.slice\(/u.test(nodes), 'Scene nodes must not be silently truncated.');
+assert(/update\(time: number, scroll: number, immediate = false\)/u.test(nodes), 'Reduced-motion nodes need an immediate static update path.');
 
 assert(/from '\.\/content'/u.test(sceneNodes), 'Scene node registry must derive its labels from the content registry.');
+assert(/data-scene-target/u.test(sceneNodes) && !/nth-child/u.test(sceneNodes), 'Scene targets must use stable identifiers rather than positional selectors.');
 for (const section of ['hero', 'about', 'services', 'projects', 'process', 'skills', 'contact']) {
   assert(new RegExp(`\\b${section}:`, 'u').test(sceneNodes), `Scene node registry no longer covers the '${section}' section.`);
 }
 
 assert(/this\.scene\.add\(this\.nodes\.group\)/u.test(experience), 'Hero scene graph no longer includes the interactive node layer.');
-assert(/private updatePicking\(\)/u.test(experience), 'Screen-space node picking is missing.');
+assert(/new Nodes\(ACCENT_A, ACCENT_B, requested\)/u.test(experience), 'Every content node must remain represented on low-power devices.');
+assert(/private updatePicking\(\): boolean/u.test(experience), 'Screen-space node picking is missing its state-change contract.');
 assert(/this\.onNodeSelect\?\.\(/u.test(experience) && /this\.onNodeHover\?\.\(/u.test(experience), 'Node interaction no longer reaches the DOM bridge.');
-assert(/isBlockedTarget\(/u.test(experience), 'Scene pointer handling must yield to interactive DOM.');
+assert(/isBlockedTarget\(/u.test(experience) && /this\.isBlockedPoint\(\)/u.test(experience), 'Scene pointer handling must yield to interactive DOM for hover and activation.');
+assert(/window\.addEventListener\('pointerup'/u.test(experience) && /private onPointerUp\(event: PointerEvent\)/u.test(experience), 'Scene activation must be committed on pointerup.');
+assert(/TAP_SLOP/u.test(experience) && /pointerDragged/u.test(experience), 'Scene activation must distinguish taps from scroll or drag gestures.');
+assert(/this\.elapsedTime \+= delta/u.test(experience), 'Scene time must remain monotonic across visibility pause/resume.');
+assert(/this\.nodes\.update\(time, this\.scroll, true\)/u.test(experience), 'Reduced motion must render nodes directly in their static final state.');
+assert(/impactRay\.intersectPlane/u.test(experience), 'Shockwave direction must derive from the clicked side of the core.');
 
 const shockwaveParts = [
   ['core ripple', /this\.core\.impact\(/u],
@@ -72,8 +82,16 @@ assert(
   'The shockwave is a per-frame decay and must stay disabled under prefers-reduced-motion.',
 );
 assert(/uVelocity/u.test(core) && /uRipple/u.test(core), 'Core pointer-reactivity uniforms are missing.');
+const transientSources = [core, particles, rings, postFx].join('\n');
+assert(!/\blastTime\b/u.test(transientSources), 'Transient decay must use the frame delta supplied by Experience.');
+assert(/this\.core\.update\(time, delta/u.test(experience)
+  && /this\.particles\.update\(time, delta/u.test(experience)
+  && /this\.rings\.update\(time, delta/u.test(experience)
+  && /this\.postfx\.render\(time, delta\)/u.test(experience), 'Experience must supply one shared frame delta to every transient effect.');
 
 assert(/scrollToElement\(/u.test(sceneNav), 'Scene selection must resolve to ordinary page navigation.');
+assert(/assertSceneTargets\(/u.test(sceneNav), 'Scene navigation must fail closed when a DOM target is missing or ambiguous.');
+assert(/dispose\(\)/u.test(sceneNav) && /removeEventListener\('keydown'/u.test(sceneNav), 'Scene navigation must clean up its global listener and tooltip.');
 assert(/setAttribute\('aria-hidden', 'true'\)/u.test(sceneNav), 'Scene node label must stay hidden from assistive technology.');
 assert(/<canvas id="gl" aria-hidden="true">/u.test(indexHtml), 'The scene must remain a shortcut: the canvas stays out of the accessibility tree.');
 

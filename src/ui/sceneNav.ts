@@ -1,3 +1,4 @@
+import type { SceneSection, SectionScene } from '../scene-nodes';
 import type { NodePointer } from '../webgl/Experience';
 import { scrollToElement } from './scroll';
 
@@ -6,6 +7,25 @@ const HIGHLIGHT_MS = 1400;
 export interface SceneNav {
   hover(pointer: NodePointer | null): void;
   select(pointer: NodePointer): void;
+  dispose(): void;
+}
+
+function assertSceneTargets(scenes: Record<SceneSection, SectionScene>): void {
+  const usedTargets = new Map<string, string>();
+  for (const scene of Object.values(scenes)) {
+    for (const node of scene.nodes) {
+      const previousNode = usedTargets.get(node.target);
+      if (previousNode) {
+        throw new Error(`Scene target '${node.target}' is shared by '${previousNode}' and '${node.id}'.`);
+      }
+      usedTargets.set(node.target, node.id);
+
+      const matches = document.querySelectorAll<HTMLElement>(node.target);
+      if (matches.length !== 1) {
+        throw new Error(`Scene target '${node.target}' for '${node.id}' resolved to ${matches.length} elements.`);
+      }
+    }
+  }
 }
 
 /**
@@ -13,7 +33,13 @@ export interface SceneNav {
  * turns a selection into ordinary page navigation. The scene is a shortcut —
  * every destination stays reachable by scrolling and by keyboard.
  */
-export function initSceneNav(reducedMotion: boolean, onRelease: () => void): SceneNav {
+export function initSceneNav(
+  reducedMotion: boolean,
+  onRelease: () => void,
+  scenes: Record<SceneSection, SectionScene>,
+): SceneNav {
+  assertSceneTargets(scenes);
+
   const tip = document.createElement('div');
   tip.className = 'scene-tip';
   tip.setAttribute('aria-hidden', 'true');
@@ -25,6 +51,7 @@ export function initSceneNav(reducedMotion: boolean, onRelease: () => void): Sce
   let highlightTimer = 0;
   let label = '';
   let halfWidth = 0;
+  let disposed = false;
 
   const clearHighlight = (): void => {
     window.clearTimeout(highlightTimer);
@@ -44,15 +71,17 @@ export function initSceneNav(reducedMotion: boolean, onRelease: () => void): Sce
     cursor?.classList.remove('cursor--node');
   };
 
-  document.addEventListener('keydown', (event) => {
+  const handleKeydown = (event: KeyboardEvent): void => {
     if (event.key !== 'Escape') return;
     onRelease();
     clearHighlight();
     hide();
-  });
+  };
+  document.addEventListener('keydown', handleKeydown);
 
   return {
     hover(pointer) {
+      if (disposed) return;
       if (!pointer || overlay?.classList.contains('case--open')) {
         hide();
         return;
@@ -73,8 +102,12 @@ export function initSceneNav(reducedMotion: boolean, onRelease: () => void): Sce
     },
 
     select(pointer) {
-      const target = document.querySelector<HTMLElement>(pointer.node.target);
-      if (!target) return;
+      if (disposed) return;
+      const matches = document.querySelectorAll<HTMLElement>(pointer.node.target);
+      if (matches.length !== 1) {
+        throw new Error(`Scene target '${pointer.node.target}' for '${pointer.node.id}' is no longer unique.`);
+      }
+      const target = matches[0];
 
       // project nodes reuse the existing case-study overlay
       if (pointer.node.projectId) {
@@ -84,6 +117,15 @@ export function initSceneNav(reducedMotion: boolean, onRelease: () => void): Sce
 
       scrollToElement(target, reducedMotion);
       highlight(target);
+    },
+
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      document.removeEventListener('keydown', handleKeydown);
+      clearHighlight();
+      hide();
+      tip.remove();
     },
   };
 }

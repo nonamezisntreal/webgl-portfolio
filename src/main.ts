@@ -139,18 +139,27 @@ let disposeExperience: (() => void) | undefined;
 async function boot(): Promise<void> {
   try {
     let nav: SceneNav | undefined;
+    const scenes = sectionScenes(locale);
     const experience = new Experience({
       canvas,
       reducedMotion,
-      scenes: sectionScenes(locale),
+      scenes,
       onFps: (fps) => {
         if (fpsLabel) fpsLabel.textContent = `${fps} fps`;
       },
       onNodeHover: (pointer) => nav?.hover(pointer),
       onNodeSelect: (pointer) => nav?.select(pointer),
     });
-    nav = initSceneNav(reducedMotion, () => experience.releaseFocus());
-    disposeExperience = () => experience.dispose();
+    try {
+      nav = initSceneNav(reducedMotion, () => experience.releaseFocus(), scenes);
+    } catch (error) {
+      experience.dispose();
+      throw error;
+    }
+    disposeExperience = () => {
+      nav?.dispose();
+      experience.dispose();
+    };
 
     initScroll(reducedMotion, {
       onProgress: (p) => experience.setScroll(p),
@@ -160,6 +169,8 @@ async function boot(): Promise<void> {
     if (reducedMotion) experience.renderOnce();
     else experience.start();
   } catch (err) {
+    disposeExperience?.();
+    disposeExperience = undefined;
     console.warn('WebGL experience disabled:', err);
     document.documentElement.classList.add('webgl-fallback');
     canvas.remove();

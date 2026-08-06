@@ -129,9 +129,12 @@ export class Nodes {
     return this.visible;
   }
 
-  /** Re-form the constellation for a section; extra instances collapse into the core. */
+  /** Re-form the constellation for a section; unused instances collapse into the core. */
   setSection(scene: SectionScene): void {
-    this.visible = scene.nodes.slice(0, this.states.length);
+    if (scene.nodes.length > this.states.length) {
+      throw new Error(`Scene requires ${scene.nodes.length} nodes but capacity is ${this.states.length}.`);
+    }
+    this.visible = [...scene.nodes];
     this.selected = -1;
 
     for (let i = 0; i < this.states.length; i++) {
@@ -170,28 +173,37 @@ export class Nodes {
     return out.copy(this.states[index].rendered).applyMatrix4(this.group.matrixWorld);
   }
 
-  update(time: number, scroll: number): void {
+  update(time: number, scroll: number, immediate = false): void {
     // content sections must stay readable, so the layer calms down as the page scrolls
     const fade = 1 - scroll * 0.35;
 
     for (let i = 0; i < this.states.length; i++) {
       const state = this.states[i];
 
-      state.current.lerp(state.target, 0.055);
-      state.hover += (state.targetHover - state.hover) * 0.14;
+      if (immediate) {
+        state.current.copy(state.target);
+        state.hover = state.targetHover;
+      } else {
+        state.current.lerp(state.target, 0.055);
+        state.hover += (state.targetHover - state.hover) * 0.14;
+      }
 
-      const selectedPulse = i === this.selected ? 0.18 + Math.sin(time * 4) * 0.06 : 0;
-      const breathe = 1 + Math.sin(time * 0.9 + state.phase) * 0.05;
+      const selectedPulse = i === this.selected
+        ? immediate ? 0.18 : 0.18 + Math.sin(time * 4) * 0.06
+        : 0;
+      const breathe = immediate ? 1 : 1 + Math.sin(time * 0.9 + state.phase) * 0.05;
       const wanted = state.targetScale * breathe * fade * (1 + state.hover * 0.85 + selectedPulse);
-      state.scale += (wanted - state.scale) * 0.09;
+      if (immediate) state.scale = wanted;
+      else state.scale += (wanted - state.scale) * 0.09;
 
       state.rendered.set(
         state.current.x * this.spread,
-        state.current.y + Math.sin(time * 0.6 + state.phase) * 0.07,
+        state.current.y + (immediate ? 0 : Math.sin(time * 0.6 + state.phase) * 0.07),
         state.current.z * this.spread,
       );
       this.dummy.position.copy(state.rendered);
-      this.dummy.rotation.set(time * state.spin, time * state.spin * 0.7, 0);
+      if (immediate) this.dummy.rotation.set(0, 0, 0);
+      else this.dummy.rotation.set(time * state.spin, time * state.spin * 0.7, 0);
       this.dummy.scale.setScalar(Math.max(state.scale, 0));
       this.dummy.updateMatrix();
       this.mesh.setMatrixAt(i, this.dummy.matrix);
@@ -205,6 +217,7 @@ export class Nodes {
     this.mesh.instanceMatrix.needsUpdate = true;
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
 
-    this.group.rotation.y = time * 0.03;
+    this.group.rotation.y = immediate ? 0 : time * 0.03;
+    this.group.updateMatrixWorld(true);
   }
 }
