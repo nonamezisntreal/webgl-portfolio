@@ -4,25 +4,8 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-interface FakeRoot {
-  dataset: Record<string, string>;
-  classList: {
-    add(...names: string[]): void;
-    remove(...names: string[]): void;
-    contains(name: string): boolean;
-  };
-}
-
-const classes = new Set<string>();
-const root: FakeRoot = {
-  dataset: {},
-  classList: {
-    add: (...names) => names.forEach((name) => classes.add(name)),
-    remove: (...names) => names.forEach((name) => classes.delete(name)),
-    contains: (name) => classes.has(name),
-  },
-};
-
+/* The activation module owns the scene's beat and the engagement record only:
+   the hero's own arrival is stylesheet work, so no document is stubbed here. */
 const listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
 const fakeWindow = {
   setTimeout: globalThis.setTimeout.bind(globalThis),
@@ -37,22 +20,20 @@ const fakeWindow = {
   },
 };
 
-const storage = new Map<string, string>();
 Object.defineProperty(globalThis, 'window', { configurable: true, value: fakeWindow });
-Object.defineProperty(globalThis, 'document', { configurable: true, value: { documentElement: root } });
 Object.defineProperty(globalThis, 'navigator', {
   configurable: true,
   value: { userActivation: { hasBeenActive: false } },
 });
-Object.defineProperty(globalThis, 'sessionStorage', {
-  configurable: true,
-  value: {
-    getItem: (key: string) => storage.get(key) ?? null,
-    setItem: (key: string, value: string) => storage.set(key, value),
-  },
-});
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function act(type: string): void {
+  for (const listener of listeners.get(type) ?? []) {
+    if (typeof listener === 'function') listener(new Event(type));
+    else listener.handleEvent(new Event(type));
+  }
+}
 
 let ignitions = 0;
 const delayed = initIntro({ reducedMotion: false });
@@ -63,8 +44,6 @@ delayed.bindIgnite(() => { ignitions += 10; });
 assert(ignitions === 1, 'Binding the scene twice replayed the ignition.');
 delayed.dispose();
 
-classes.clear();
-storage.clear();
 ignitions = 0;
 const skipped = initIntro({ reducedMotion: false });
 skipped.skip();
@@ -73,8 +52,6 @@ skipped.bindIgnite(() => { ignitions += 1; });
 assert(ignitions === 0, 'A skipped intro fired a late ignition when the scene bound.');
 skipped.dispose();
 
-classes.clear();
-storage.clear();
 ignitions = 0;
 const reduced = initIntro({ reducedMotion: true });
 await sleep(10);
@@ -82,5 +59,14 @@ reduced.bindIgnite(() => { ignitions += 1; });
 assert(ignitions === 0, 'Reduced motion received the animated ignition.');
 reduced.dispose();
 
+ignitions = 0;
+const engaged = initIntro({ reducedMotion: false });
+assert(!engaged.engaged, 'An untouched page reported the visitor as already engaged.');
+act('pointerdown');
+assert(engaged.engaged, 'A press did not register as the visitor taking over.');
+engaged.bindIgnite(() => { ignitions += 1; });
+assert(ignitions === 0, 'A scene arriving after the visitor acted still fired its ignition.');
+engaged.dispose();
+
 assert([...listeners.values()].every((group) => group.size === 0), 'Intro teardown left global engagement listeners behind.');
-console.log('Intro runtime regression tests passed: delayed binding, skip and reduced-motion ignition contracts.');
+console.log('Intro runtime regression tests passed: delayed binding, skip, engagement and reduced-motion ignition contracts.');

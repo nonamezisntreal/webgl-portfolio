@@ -607,38 +607,34 @@ html[lang='en'] .lang-toggle::before { transform: translateX(100%); }
 }
 
 /* ── Hero activation ──────────────────────────────────────────
-   Live only while JS drives it: with no marker on the document the hero
-   renders in its ordinary state, which is also where the activation ends. */
-[data-intro] .hero .reveal {
-  opacity: 0;
-  transform: none;
-  transition: none;
+   Driven by the stylesheet, not by the runtime: the beats play from the first
+   painted frame, so the hero reads the same whether the bundle is fast, slow
+   or never arrives. The scene adds its own flash once it exists — it cannot
+   announce itself before its own code is here. */
+.hero .reveal {
+  animation: hero-arrive 420ms var(--ease-out) both;
+  animation-delay: calc(280ms + var(--i, 0) * 60ms);
 }
 
-[data-intro] .hero__title .hero__line {
-  clip-path: inset(0 100% 0 0);
+/* the name opens under a horizontal mask, the second line a beat behind; the
+   caret lives inside the accent line, so the mask uncovers it last on its own */
+.hero__title .reveal {
+  animation: hero-open 620ms var(--ease-out) both;
 }
 
-/* the name opens under a horizontal mask, second line a beat behind; the caret
-   lives inside the accent line, so the mask uncovers it last on its own */
-[data-intro].is-intro-title .hero__title .reveal {
-  opacity: 1;
+.hero__title .hero__line--accent {
+  animation-delay: 160ms;
 }
 
-[data-intro].is-intro-title .hero__title .hero__line {
-  clip-path: inset(0 0 0 0);
-  transition: clip-path 620ms var(--ease-out);
+@keyframes hero-arrive {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
 }
 
-[data-intro].is-intro-title .hero__line--accent {
-  transition-delay: 160ms;
-}
-
-/* then the rest of the hero materialises in its reading order */
-[data-intro].is-intro-interface .hero .reveal {
-  opacity: 1;
-  transition: opacity 420ms var(--ease-out);
-  transition-delay: calc(var(--i, 0) * 70ms);
+/* the mask carries the reveal, so these lines are painted from the start */
+@keyframes hero-open {
+  from { opacity: 1; transform: none; clip-path: inset(0 100% 0 0); }
+  to { opacity: 1; transform: none; clip-path: inset(0 0 0 0); }
 }
 
 /* ── Buttons ──────────────────────────────────────────────── */
@@ -1590,4 +1586,7 @@ html[lang='en'] .lang-toggle::before { transform: translateX(100%); }
     transition-duration: 0.01ms !important;
   }
   .reveal { opacity: 1; transform: none; }
+  /* the hero arrives already open: its staged beats are motion, not content */
+  .hero .reveal,
+  .hero__title .reveal { animation: none; clip-path: none; }
 }

@@ -724,6 +724,44 @@ async function runFallback(origin, results) {
   }
 }
 
+/**
+ * The hero belongs to the document, not to the bundle. With the runtime blocked
+ * — a slow network, a failed asset — the page must still open its own name and
+ * offer a call to action that can actually be pressed.
+ */
+async function runHeroWithoutRuntime(origin, results) {
+  const browser = await launchChrome();
+  const { cdp } = browser;
+  try {
+    await setViewport(cdp, 1440, 900);
+    await cdp.send('Network.setBlockedURLs', { urls: ['*/assets/*.js'] });
+    await cdp.navigate(`${origin}${basePath}`);
+    await sleep(1600);
+    const hero = await cdp.evaluate(`(() => {
+      const read = (selector, property) => getComputedStyle(document.querySelector(selector))[property];
+      const box = document.getElementById('hero-primary').getBoundingClientRect();
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return {
+        runtimeRan: document.body.classList.contains('is-ready'),
+        headingLength: document.querySelector('h1').textContent.trim().length,
+        lineOpacity: Number(read('.hero__line', 'opacity')),
+        lineClip: read('.hero__line', 'clipPath'),
+        taglineOpacity: Number(read('.hero__tagline', 'opacity')),
+        actionsOpacity: Number(read('.hero__actions', 'opacity')),
+        ctaReachable: hit !== null && hit.closest('#hero-primary') !== null,
+      };
+    })()`);
+    assert(!hero.runtimeRan, 'The runtime was expected to stay blocked for this contract.');
+    assert(hero.headingLength > 0 && hero.lineOpacity === 1 && !hero.lineClip.includes('100%')
+      && hero.taglineOpacity === 1 && hero.actionsOpacity === 1 && hero.ctaReachable,
+      `The hero did not open on its own without the runtime: ${JSON.stringify(hero)}`);
+    await cdp.screenshot(resolve(artifactDir, 'hero-without-runtime.png'));
+    results.push({ id: 'BROWSER-HERO-WITHOUT-RUNTIME', status: 'PASS', details: hero });
+  } finally {
+    await browser.close();
+  }
+}
+
 async function domHtml(cdp) {
   const document = await cdp.send('DOM.getDocument', { depth: -1, pierce: true });
   const result = await cdp.send('DOM.getOuterHTML', { nodeId: document.root.nodeId });
@@ -784,6 +822,7 @@ let failure;
 try {
   await runIdleRegression(origin, results);
   await runPrimary(origin, results);
+  await runHeroWithoutRuntime(origin, results);
   await runFallback(origin, results);
   await runNoJs(origin, results);
 } catch (error) {

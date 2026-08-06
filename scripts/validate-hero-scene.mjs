@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 const root = resolve(process.env.PROJECT_ROOT ?? process.cwd());
-const [particles, rings, core, postFx, experience, nodes, sceneNodes, sceneNav, intro, indexHtml] = await Promise.all([
+const [particles, rings, core, postFx, experience, nodes, sceneNodes, sceneNav, intro, styles, indexHtml] = await Promise.all([
   readFile(resolve(root, 'src/webgl/Particles.ts'), 'utf8'),
   readFile(resolve(root, 'src/webgl/Rings.ts'), 'utf8'),
   readFile(resolve(root, 'src/webgl/Core.ts'), 'utf8'),
@@ -12,6 +12,7 @@ const [particles, rings, core, postFx, experience, nodes, sceneNodes, sceneNav, 
   readFile(resolve(root, 'src/scene-nodes.ts'), 'utf8'),
   readFile(resolve(root, 'src/ui/sceneNav.ts'), 'utf8'),
   readFile(resolve(root, 'src/ui/intro.ts'), 'utf8'),
+  readFile(resolve(root, 'src/styles/main.css'), 'utf8'),
   readFile(resolve(root, 'index.html'), 'utf8'),
 ]);
 
@@ -149,12 +150,19 @@ assert(/SKIP_EVENTS/u.test(intro) && /removeEventListener\(type, markActed\)/u.t
   'The activation must end the moment the visitor acts, and let go of its listeners.');
 assert(/navigator\.userActivation/u.test(intro) && /activation\?\.hasBeenActive/u.test(intro),
   'A gesture that landed before this bundle ran still counts as the visitor having acted.');
-assert(/delete root\.dataset\.intro/u.test(intro), 'A finished activation must leave the page carrying no intro state.');
-assert(/sessionStorage/u.test(intro) && /REPEAT_SCALE/u.test(intro), 'A repeat visit in the same session must not sit through the full activation.');
-assert(/bindIgnite\(callback/u.test(intro) && /ignitionPending/u.test(intro) && /fireIgnition\(\)/u.test(intro),
-  'A scene that binds after the ignition beat must receive it once unless the intro was skipped.');
+assert(/bindIgnite\(callback\) \{[\s\S]*?if \(finished \|\| ignited\) return;/u.test(intro),
+  'The scene must receive its ignition exactly once, and never after the visitor took over.');
 assert(/dispose\(\)/u.test(intro) && /removeEngagementListeners\(\)/u.test(intro),
-  'Intro teardown must release global listeners and pending timers.');
+  'Intro teardown must release global listeners.');
+assert(!/dataset|classList/u.test(intro),
+  'Hero visibility must not depend on the runtime: the activation module may not stage the document.');
+
+assert(/@keyframes hero-arrive/u.test(styles) && /@keyframes hero-open/u.test(styles),
+  'The hero must carry its own arrival, so it plays from the first painted frame.');
+assert(!/\[data-intro\]/u.test(styles) && !/is-intro-/u.test(styles),
+  'A hero gated on a runtime marker stays invisible until the bundle arrives.');
+assert(/\.hero__title \.reveal \{ animation: none; clip-path: none; \}/u.test(styles),
+  'Reduced motion must land on the open hero instead of replaying its beats instantly.');
 
 assert(!/scene-guide/u.test(indexHtml) && !/scene-pulse/u.test(indexHtml) && !/data-intro/u.test(indexHtml),
   'Scene onboarding and activation state must be applied at runtime without changing static index markup.');
