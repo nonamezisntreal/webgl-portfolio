@@ -3,14 +3,34 @@ import { Core } from './Core';
 import { Particles } from './Particles';
 import { Rings } from './Rings';
 import { PostFX } from './PostFX';
+import { Nodes } from './Nodes';
+import type { SceneNode, SceneSection, SectionScene } from '../scene-nodes';
 
 const ACCENT_A = new THREE.Color('#67e8f9');
 const ACCENT_B = new THREE.Color('#a78bfa');
+/** Screen-space pick radius in CSS pixels. */
+const PICK_RADIUS = 46;
+/** Seconds the camera lingers on a node after it is selected. */
+const FOCUS_HOLD = 0.9;
+/** Resting distance between the camera and the core. */
+const CAMERA_DISTANCE = 6.2;
+/** Horizontal world radius the node formations are expected to fit within. */
+const FORMATION_REACH = 2.6;
+
+export interface NodePointer {
+  node: SceneNode;
+  index: number;
+  x: number;
+  y: number;
+}
 
 export interface ExperienceOptions {
   canvas: HTMLCanvasElement;
   reducedMotion: boolean;
+  scenes: Record<SceneSection, SectionScene>;
   onFps?: (fps: number) => void;
+  onNodeHover?: (pointer: NodePointer | null) => void;
+  onNodeSelect?: (pointer: NodePointer) => void;
 }
 
 interface ExtendedNavigator extends Navigator {
@@ -30,6 +50,7 @@ export class Experience {
   private readonly particles: Particles;
   private readonly rings: Rings;
   private readonly postfx: PostFX;
+  private readonly nodes: Nodes;
 
   private readonly mouse = new THREE.Vector2();
   private readonly smoothMouse = new THREE.Vector2();
@@ -37,9 +58,29 @@ export class Experience {
   private readonly targetSectionOffset = new THREE.Vector3();
   private scroll = 0;
 
+  private readonly scenes: Record<SceneSection, SectionScene>;
+  private readonly pointerClient = new THREE.Vector2(-1e4, -1e4);
+  private readonly hoverScreen = new THREE.Vector2();
+  private readonly worldScratch = new THREE.Vector3();
+  private readonly screenScratch = new THREE.Vector2();
+  private readonly projectScratch = new THREE.Vector3();
+  private readonly impactScratch = new THREE.Vector3();
+  private readonly focusScratch = new THREE.Vector3();
+  private readonly cameraBase = new THREE.Vector3();
+  private readonly lookTarget = new THREE.Vector3();
+  private pointerSeen = false;
+  private pointerSpeed = 0;
+  private lastPointerTime = 0;
+  private hoverIndex = -1;
+  private focusIndex = -1;
+  private focusHold = 0;
+  private focusWeight = 0;
+
   private readonly reducedMotion: boolean;
   private readonly isLowPower: boolean;
   private readonly onFps?: (fps: number) => void;
+  private readonly onNodeHover?: (pointer: NodePointer | null) => void;
+  private readonly onNodeSelect?: (pointer: NodePointer) => void;
   private requestedRunning = false;
   private running = false;
   private contextLost = false;
@@ -54,6 +95,7 @@ export class Experience {
 
   private readonly handleResize = () => this.resize();
   private readonly handlePointerMove = (event: PointerEvent) => this.onPointerMove(event);
+  private readonly handlePointerDown = (event: PointerEvent) => this.onPointerDown(event);
   private readonly handleVisibility = () => {
     if (document.hidden) this.pauseLoop();
     else if (this.requestedRunning && !this.reducedMotion) this.resumeLoop();
@@ -70,10 +112,13 @@ export class Experience {
     else if (this.requestedRunning && !document.hidden) this.resumeLoop();
   };
 
-  constructor({ canvas, reducedMotion, onFps }: ExperienceOptions) {
+  constructor({ canvas, reducedMotion, scenes, onFps, onNodeHover, onNodeSelect }: ExperienceOptions) {
     this.canvas = canvas;
     this.reducedMotion = reducedMotion;
+    this.scenes = scenes;
     this.onFps = onFps;
+    this.onNodeHover = onNodeHover;
+    this.onNodeSelect = onNodeSelect;
     this.isLowPower = this.detectLowPower();
     this.qualityScale = this.isLowPower ? 0.72 : 1;
 
@@ -87,7 +132,7 @@ export class Experience {
     this.renderer.setClearColor('#06060b', 1);
 
     this.camera = new THREE.PerspectiveCamera(42, 1, 0.1, 60);
-    this.camera.position.set(0, 0, 6.2);
+    this.camera.position.set(0, 0, CAMERA_DISTANCE);
 
     this.core = new Core(ACCENT_A, ACCENT_B);
     this.particles = new Particles(ACCENT_A, ACCENT_B, this.isLowPower ? 480 : 1600);
@@ -96,9 +141,15 @@ export class Experience {
     this.scene.fog = new THREE.FogExp2('#06060b', 0.045);
     this.postfx = new PostFX(this.renderer, this.scene, this.camera, this.isLowPower ? 'low' : 'high');
 
+    const requested = Object.values(scenes).reduce((max, scene) => Math.max(max, scene.nodes.length), 0);
+    this.nodes = new Nodes(ACCENT_A, ACCENT_B, Math.min(requested, this.isLowPower ? 6 : 12));
+    this.scene.add(this.nodes.group);
+    this.nodes.setSection(scenes.hero);
+
     this.resize();
     window.addEventListener('resize', this.handleResize, { passive: true });
     window.addEventListener('pointermove', this.handlePointerMove, { passive: true });
+    window.addEventListener('pointerdown', this.handlePointerDown);
     document.addEventListener('visibilitychange', this.handleVisibility);
     canvas.addEventListener('webglcontextlost', this.handleContextLost);
     canvas.addEventListener('webglcontextrestored', this.handleContextRestored);
@@ -120,6 +171,20 @@ export class Experience {
     };
     const [x, y, z] = offsets[name] ?? [0, 0, 0];
     this.targetSectionOffset.set(x, y, z);
+
+    const scene = this.scenes[name as SceneSection];
+    if (!scene) return;
+    this.nodes.setSection(scene);
+    this.clearHover();
+    this.releaseFocus();
+    if (this.reducedMotion) this.renderOnce();
+  }
+
+  /** Drop any node focus and let the camera return to its scroll position. */
+  releaseFocus(): void {
+    this.focusIndex = -1;
+    this.focusHold = 0;
+    this.nodes.setSelected(-1);
   }
 
   start(): void {
@@ -142,6 +207,7 @@ export class Experience {
     this.core.update(2.5, this.smoothMouse, this.scroll);
     this.particles.update(2.5, this.scroll);
     this.rings.update(2.5, this.smoothMouse, this.scroll);
+    this.nodes.update(2.5, this.scroll);
     this.postfx.render(2.5);
   }
 
@@ -152,6 +218,7 @@ export class Experience {
     this.pauseLoop();
     window.removeEventListener('resize', this.handleResize);
     window.removeEventListener('pointermove', this.handlePointerMove);
+    window.removeEventListener('pointerdown', this.handlePointerDown);
     document.removeEventListener('visibilitychange', this.handleVisibility);
     this.canvas.removeEventListener('webglcontextlost', this.handleContextLost);
     this.canvas.removeEventListener('webglcontextrestored', this.handleContextRestored);
@@ -200,7 +267,127 @@ export class Experience {
       (event.clientX / window.innerWidth) * 2 - 1,
       -(event.clientY / window.innerHeight) * 2 + 1,
     );
+
+    const now = performance.now();
+    if (this.pointerSeen) {
+      const travelled = Math.hypot(event.clientX - this.pointerClient.x, event.clientY - this.pointerClient.y);
+      const elapsed = Math.max(16, now - this.lastPointerTime);
+      this.pointerSpeed = Math.max(this.pointerSpeed, Math.min(1, travelled / elapsed / 2.4));
+    }
+    this.lastPointerTime = now;
+    this.pointerSeen = true;
+    this.pointerClient.set(event.clientX, event.clientY);
+
+    // without an animation loop nothing else would refresh the hover affordance
+    if (this.reducedMotion) {
+      this.renderOnce();
+      this.updatePicking();
+    }
+  }
+
+  private onPointerDown(event: PointerEvent): void {
+    if (this.disposed || this.contextLost || event.button !== 0) return;
+    if (this.isBlockedTarget(event.target)) return;
+
+    this.pointerClient.set(event.clientX, event.clientY);
+    this.pointerSeen = true;
+    this.updatePicking();
+
+    if (this.hoverIndex >= 0) {
+      this.selectNode(this.hoverIndex);
+      return;
+    }
+    this.shockwave(event.clientX, event.clientY);
+  }
+
+  /** DOM owns its own clicks; the scene only reacts to empty space. */
+  private isBlockedTarget(target: EventTarget | null): boolean {
+    const element = target instanceof Element ? target : null;
+    return Boolean(element?.closest('a, button, input, textarea, select, label, [data-project], .case'));
+  }
+
+  private selectNode(index: number): void {
+    const node = this.nodes.activeNodes[index];
+    if (!node) return;
+    this.nodes.setSelected(index);
+    this.focusIndex = index;
+    this.focusHold = FOCUS_HOLD;
+    this.onNodeSelect?.({ node, index, x: this.hoverScreen.x, y: this.hoverScreen.y });
+    // the flash is a per-frame decay, and reduced motion renders no continuous frames
     if (this.reducedMotion) this.renderOnce();
+    else this.postfx.flash(0.45);
+  }
+
+  /** Strike the scene from a screen position; intensity falls off away from the core. */
+  private shockwave(clientX: number, clientY: number): void {
+    // every part of the strike decays per frame; with no animation loop it would
+    // freeze at full strength instead of fading, so reduced motion gets no strike
+    if (this.reducedMotion) return;
+
+    const ndcX = (clientX / window.innerWidth) * 2 - 1;
+    const ndcY = -(clientY / window.innerHeight) * 2 + 1;
+    this.impactScratch.set(ndcX, ndcY, 0.5).unproject(this.camera).sub(this.camera.position).normalize().negate();
+
+    const reach = Math.min(window.innerWidth, window.innerHeight) * 0.55;
+    let strength = 0.3;
+    if (this.projectToScreen(this.worldScratch.set(0, 0, 0), this.screenScratch)) {
+      const distance = this.screenScratch.distanceTo(this.pointerClient);
+      strength = THREE.MathUtils.clamp(1 - distance / reach, 0.28, 1);
+    }
+
+    this.core.impact(this.impactScratch, strength);
+    this.particles.impulse(strength * 0.8);
+    this.rings.pulse(strength);
+    this.postfx.flash(strength * 0.7);
+  }
+
+  private clearHover(): void {
+    if (this.hoverIndex === -1) return;
+    this.hoverIndex = -1;
+    this.nodes.setHovered(-1);
+    this.onNodeHover?.(null);
+  }
+
+  /** Screen-space picking: forgiving, allocation-free and independent of node size. */
+  private updatePicking(): void {
+    const nodes = this.nodes.activeNodes;
+    if (!this.pointerSeen || nodes.length === 0) {
+      this.clearHover();
+      return;
+    }
+
+    this.nodes.group.updateMatrixWorld();
+    let best = -1;
+    let bestDistance = PICK_RADIUS;
+    for (let i = 0; i < nodes.length; i++) {
+      this.nodes.worldPosition(i, this.worldScratch);
+      if (!this.projectToScreen(this.worldScratch, this.screenScratch)) continue;
+      const distance = this.screenScratch.distanceTo(this.pointerClient);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = i;
+        this.hoverScreen.copy(this.screenScratch);
+      }
+    }
+
+    if (best === -1) {
+      this.clearHover();
+      return;
+    }
+
+    this.hoverIndex = best;
+    this.nodes.setHovered(best);
+    this.onNodeHover?.({ node: nodes[best], index: best, x: this.hoverScreen.x, y: this.hoverScreen.y });
+  }
+
+  private projectToScreen(world: THREE.Vector3, out: THREE.Vector2): boolean {
+    this.projectScratch.copy(world).project(this.camera);
+    if (this.projectScratch.z > 1) return false;
+    out.set(
+      (this.projectScratch.x * 0.5 + 0.5) * window.innerWidth,
+      (-this.projectScratch.y * 0.5 + 0.5) * window.innerHeight,
+    );
+    return true;
   }
 
   private resize(): void {
@@ -213,6 +400,11 @@ export class Experience {
     this.renderer.setPixelRatio(pixelRatio);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
+
+    // portrait viewports are limited by horizontal FOV, so pull the formations in
+    const halfHeight = Math.tan((this.camera.fov * Math.PI) / 360) * CAMERA_DISTANCE;
+    this.nodes.setSpread((halfHeight * this.camera.aspect) / FORMATION_REACH);
+
     this.postfx.setSize(width, height, pixelRatio);
     if (this.reducedMotion) this.renderOnce();
   }
@@ -248,15 +440,36 @@ export class Experience {
 
     this.smoothMouse.lerp(this.mouse, 0.06);
     this.sectionOffset.lerp(this.targetSectionOffset, 0.035);
-    this.camera.position.x = this.smoothMouse.x * 0.55 + this.sectionOffset.x;
-    this.camera.position.y = this.smoothMouse.y * 0.35 + this.sectionOffset.y - this.scroll * 0.4;
-    this.camera.position.z = 6.2 + this.sectionOffset.z + this.scroll * 2.4;
-    this.camera.lookAt(0, 0, 0);
+    this.pointerSpeed *= Math.exp(-delta * 4);
+    this.core.setVelocity(this.pointerSpeed);
+
+    this.focusHold = Math.max(0, this.focusHold - delta);
+    const focusing = this.focusIndex >= 0 && this.focusHold > 0 && !this.reducedMotion;
+    this.focusWeight += ((focusing ? 1 : 0) - this.focusWeight) * 0.08;
+
+    this.cameraBase.set(
+      this.smoothMouse.x * 0.55 + this.sectionOffset.x,
+      this.smoothMouse.y * 0.35 + this.sectionOffset.y - this.scroll * 0.4,
+      CAMERA_DISTANCE + this.sectionOffset.z + this.scroll * 2.4,
+    );
+    this.lookTarget.set(0, 0, 0);
+
+    if (this.focusIndex >= 0 && this.focusWeight > 0.001) {
+      this.nodes.worldPosition(this.focusIndex, this.worldScratch);
+      this.lookTarget.lerp(this.worldScratch, this.focusWeight * 0.8);
+      this.focusScratch.copy(this.worldScratch).multiplyScalar(1.5).setZ(this.worldScratch.z + 3.4);
+      this.cameraBase.lerp(this.focusScratch, this.focusWeight * 0.55);
+    }
+
+    this.camera.position.copy(this.cameraBase);
+    this.camera.lookAt(this.lookTarget);
 
     this.postfx.setBloomScale(1 - this.scroll * 0.45);
     this.core.update(time, this.smoothMouse, this.scroll);
     this.particles.update(time, this.scroll);
     this.rings.update(time, this.smoothMouse, this.scroll);
+    this.nodes.update(time, this.scroll);
+    this.updatePicking();
     this.postfx.render(time);
 
     this.fpsAccum += delta;

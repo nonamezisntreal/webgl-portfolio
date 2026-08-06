@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { coreVertex, coreFragment, haloVertex, haloFragment } from './shaders';
 
+const inverseRotation = new THREE.Quaternion();
+
 /**
  * The "energy core": a noise-displaced glassy orb with a glowing rim
  * plus an additive halo billboard behind it.
@@ -11,6 +13,8 @@ export class Core {
   private orbMaterial: THREE.ShaderMaterial;
   private haloMaterial: THREE.ShaderMaterial;
   private halo: THREE.Mesh;
+  private lastTime = 0;
+  private velocity = 0;
 
   constructor(colorA: THREE.Color, colorB: THREE.Color) {
     this.orbMaterial = new THREE.ShaderMaterial({
@@ -26,6 +30,10 @@ export class Core {
         uColorB: { value: colorB },
         uHueShift: { value: 0 },
         uDim: { value: 1 },
+        uVelocity: { value: 0 },
+        uRipple: { value: 0 },
+        uRippleAge: { value: 0 },
+        uRippleDir: { value: new THREE.Vector3(0, 0, 1) },
       },
     });
 
@@ -60,6 +68,21 @@ export class Core {
     this.group.add(this.halo);
   }
 
+  /** Pointer speed (0..1) feeding surface turbulence. */
+  setVelocity(velocity: number): void {
+    this.velocity = Math.min(1, Math.max(0, velocity));
+  }
+
+  /** Fire a shockwave travelling outward from a world-space `direction`. */
+  impact(direction: THREE.Vector3, strength: number): void {
+    const u = this.orbMaterial.uniforms;
+    // the shader works in object space, so undo the group's own rotation
+    inverseRotation.copy(this.group.quaternion).invert();
+    u.uRippleDir.value.copy(direction).applyQuaternion(inverseRotation).normalize();
+    u.uRipple.value = Math.min(1, strength);
+    u.uRippleAge.value = 0;
+  }
+
   /**
    * @param time   elapsed seconds
    * @param mouse  normalized mouse (-1..1)
@@ -67,7 +90,13 @@ export class Core {
    */
   update(time: number, mouse: THREE.Vector2, scroll: number): void {
     const u = this.orbMaterial.uniforms;
+    const delta = Math.min(Math.max(time - this.lastTime, 0), 0.1);
+    this.lastTime = time;
+
     u.uTime.value = time;
+    u.uVelocity.value = THREE.MathUtils.lerp(u.uVelocity.value, this.velocity, 0.12);
+    u.uRippleAge.value += delta;
+    u.uRipple.value *= Math.exp(-delta * 2.6);
     u.uMouse.value.lerp(mouse, 0.05);
     u.uAmp.value = THREE.MathUtils.lerp(u.uAmp.value, 0.25 + scroll * 0.4, 0.04);
     u.uHueShift.value = THREE.MathUtils.lerp(u.uHueShift.value, scroll, 0.05);

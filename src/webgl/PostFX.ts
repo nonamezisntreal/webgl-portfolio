@@ -14,6 +14,9 @@ export class PostFX {
   private bloom: UnrealBloomPass;
   private grade: ShaderPass;
   private baseBloom: number;
+  private bloomScale = 1;
+  private flashValue = 0;
+  private lastTime = 0;
 
   constructor(
     renderer: THREE.WebGLRenderer,
@@ -48,7 +51,12 @@ export class PostFX {
 
   /** Scale bloom strength (used to calm the scene as the page scrolls). */
   setBloomScale(scale: number): void {
-    this.bloom.strength = this.baseBloom * scale;
+    this.bloomScale = scale;
+  }
+
+  /** Brief bloom surge on impact; decays on its own. */
+  flash(strength: number): void {
+    this.flashValue = Math.min(1, strength);
   }
 
   setSize(width: number, height: number, pixelRatio: number): void {
@@ -57,6 +65,11 @@ export class PostFX {
   }
 
   render(time: number): void {
+    const delta = Math.min(Math.max(time - this.lastTime, 0), 0.1);
+    this.lastTime = time;
+    this.flashValue *= Math.exp(-delta * 3.2);
+
+    this.bloom.strength = this.baseBloom * this.bloomScale * (1 + this.flashValue * 1.6);
     this.grade.uniforms.uTime.value = time;
     this.composer.render();
   }

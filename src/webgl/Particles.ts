@@ -6,6 +6,7 @@ export class Particles {
   group = new THREE.Group();
 
   private material: THREE.ShaderMaterial;
+  private lastTime = 0;
 
   constructor(colorA: THREE.Color, colorB: THREE.Color, count: number) {
     const positions = new Float32Array(count * 3);
@@ -53,14 +54,24 @@ export class Particles {
         uTime: { value: 0 },
         uSize: { value: 0.035 },
         uSpread: { value: 0 },
+        uImpulse: { value: 0 },
       },
     });
 
     this.group.add(new THREE.Points(geometry, this.material));
   }
 
+  /** Push the field outward once; the shove decays on its own. */
+  impulse(strength: number): void {
+    this.material.uniforms.uImpulse.value = Math.min(1, strength);
+  }
+
   update(time: number, scroll: number): void {
+    const delta = Math.min(Math.max(time - this.lastTime, 0), 0.1);
+    this.lastTime = time;
+
     this.material.uniforms.uTime.value = time;
+    this.material.uniforms.uImpulse.value *= Math.exp(-delta * 2.2);
     this.material.uniforms.uSpread.value = THREE.MathUtils.lerp(
       this.material.uniforms.uSpread.value,
       scroll,

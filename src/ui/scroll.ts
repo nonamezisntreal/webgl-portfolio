@@ -5,6 +5,14 @@ export interface ScrollCallbacks {
   onSection: (name: string) => void;
 }
 
+let activeLenis: Lenis | null = null;
+
+/** Scroll to an element through the active smooth-scroll instance when there is one. */
+export function scrollToElement(target: HTMLElement, reducedMotion: boolean): void {
+  if (activeLenis) activeLenis.scrollTo(target, { offset: -90 });
+  else target.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' });
+}
+
 /**
  * Smooth scroll (Lenis) + scroll progress + active section tracking.
  * Falls back to native scroll when reduced motion is preferred.
@@ -18,6 +26,8 @@ export function initScroll(reducedMotion: boolean, callbacks: ScrollCallbacks): 
       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       smoothWheel: true,
     });
+
+    activeLenis = lenis;
 
     const raf = (time: number) => {
       lenis!.raf(time);

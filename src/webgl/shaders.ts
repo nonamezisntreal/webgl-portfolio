@@ -74,6 +74,10 @@ export const coreVertex = /* glsl */ `
 uniform float uTime;
 uniform float uAmp;
 uniform vec2 uMouse;
+uniform float uVelocity;
+uniform float uRipple;
+uniform float uRippleAge;
+uniform vec3 uRippleDir;
 
 varying vec3 vNormal;
 varying vec3 vViewDir;
@@ -88,9 +92,14 @@ void main() {
   float n = snoise(normal * 1.6 + vec3(t, t * 0.7, -t * 0.5));
   n += 0.5 * snoise(normal * 3.4 - vec3(t * 0.6, -t, t * 0.4));
 
-  // mouse adds local turbulence
+  // mouse presence and pointer speed both add local turbulence
   float mouseInfluence = length(uMouse) * 0.35;
-  float disp = n * (0.16 + uAmp * 0.30 + mouseInfluence * 0.12);
+  float disp = n * (0.16 + uAmp * 0.30 + mouseInfluence * 0.12 + uVelocity * 0.14);
+
+  // shockwave travelling away from the impact point after a click
+  float facing = dot(normalize(normal), normalize(uRippleDir));
+  float wave = sin(facing * 7.0 - uRippleAge * 9.0) * exp(-uRippleAge * 2.2);
+  disp += wave * uRipple * 0.24;
 
   vec3 displaced = position + normal * disp;
   vNoise = n;
@@ -109,6 +118,7 @@ uniform vec3 uColorA;
 uniform vec3 uColorB;
 uniform float uHueShift;
 uniform float uDim;
+uniform float uRipple;
 
 varying vec3 vNormal;
 varying vec3 vViewDir;
@@ -129,7 +139,10 @@ void main() {
   // subtle inner energy veins
   color += base * smoothstep(0.55, 0.95, vNoise) * 0.35 * uDim;
 
-  float alpha = clamp(0.18 + fresnel * 0.95, 0.0, 1.0);
+  // the shockwave briefly charges the whole body
+  color += base * uRipple * 0.4 * uDim;
+
+  float alpha = clamp(0.18 + fresnel * 0.95 + uRipple * 0.15, 0.0, 1.0);
   gl_FragColor = vec4(color, alpha);
 }
 `;
@@ -163,6 +176,7 @@ export const particlesVertex = /* glsl */ `
 uniform float uTime;
 uniform float uSize;
 uniform float uSpread;
+uniform float uImpulse;
 
 attribute float aScale;
 attribute float aSpeed;
@@ -182,12 +196,16 @@ void main() {
   p *= 1.0 + uSpread * 0.35;
   p.y += sin(uTime * 0.2 * aSpeed + aOffset * 6.28) * 0.18;
 
+  // radial shove when the core is struck
+  float ring = sin(length(position) * 1.2 - uImpulse * 8.0);
+  p += normalize(position) * uImpulse * (0.34 + ring * 0.24);
+
   vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
   gl_PointSize = uSize * aScale * (1.0 / -mvPosition.z) * 320.0;
   gl_Position = projectionMatrix * mvPosition;
 
   vColor = aColor;
-  vTwinkle = 0.55 + 0.45 * sin(uTime * (1.2 + aSpeed) + aOffset * 12.0);
+  vTwinkle = (0.55 + 0.45 * sin(uTime * (1.2 + aSpeed) + aOffset * 12.0)) * (1.0 + uImpulse * 1.2);
 }
 `;
 

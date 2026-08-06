@@ -8,8 +8,11 @@ export class Rings {
   group = new THREE.Group();
 
   private rings: THREE.Mesh[] = [];
+  private ringOpacity: number[] = [];
   private shards: THREE.Mesh[] = [];
   private shardData: { radius: number; speed: number; y: number; phase: number; rot: number }[] = [];
+  private lastTime = 0;
+  private pulseValue = 0;
 
   constructor(colorA: THREE.Color, colorB: THREE.Color) {
     const ringConfigs = [
@@ -31,6 +34,7 @@ export class Rings {
       );
       ring.rotation.x = Math.PI / 2 + cfg.tilt;
       this.rings.push(ring);
+      this.ringOpacity.push(cfg.opacity);
       this.group.add(ring);
     }
 
@@ -61,12 +65,24 @@ export class Rings {
     }
   }
 
+  /** Kick the rings outward once; the pulse decays on its own. */
+  pulse(strength: number): void {
+    this.pulseValue = Math.min(1, strength);
+  }
+
   update(time: number, mouse: THREE.Vector2, scroll: number): void {
+    const delta = Math.min(Math.max(time - this.lastTime, 0), 0.1);
+    this.lastTime = time;
+    this.pulseValue *= Math.exp(-delta * 2.4);
+
     for (let i = 0; i < this.rings.length; i++) {
       const ring = this.rings[i];
       const dir = i % 2 === 0 ? 1 : -1;
       ring.rotation.z = time * 0.05 * dir;
       ring.rotation.x += (mouse.y * 0.0006 - scroll * 0.0002) * dir;
+      ring.scale.setScalar(1 + this.pulseValue * 0.14);
+      (ring.material as THREE.MeshBasicMaterial).opacity =
+        this.ringOpacity[i] * (1 + this.pulseValue * 2.6);
     }
 
     for (let i = 0; i < this.shards.length; i++) {

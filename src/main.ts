@@ -9,6 +9,8 @@ import { initCursor } from './ui/cursor';
 import { initProjectCases } from './ui/projects';
 import { initContactForm } from './ui/contact';
 import { initInteractions, bindMagnetic } from './ui/interactions';
+import { initSceneNav, type SceneNav } from './ui/sceneNav';
+import { sectionScenes } from './scene-nodes';
 import { Experience } from './webgl/Experience';
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -136,13 +138,18 @@ let disposeExperience: (() => void) | undefined;
 
 async function boot(): Promise<void> {
   try {
+    let nav: SceneNav | undefined;
     const experience = new Experience({
       canvas,
       reducedMotion,
+      scenes: sectionScenes(locale),
       onFps: (fps) => {
         if (fpsLabel) fpsLabel.textContent = `${fps} fps`;
       },
+      onNodeHover: (pointer) => nav?.hover(pointer),
+      onNodeSelect: (pointer) => nav?.select(pointer),
     });
+    nav = initSceneNav(reducedMotion, () => experience.releaseFocus());
     disposeExperience = () => experience.dispose();
 
     initScroll(reducedMotion, {
