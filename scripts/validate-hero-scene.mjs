@@ -53,7 +53,17 @@ for (const formation of formations) {
 assert(/worldPosition\(/u.test(nodes), 'Node world positions must stay resolvable for picking and focus.');
 assert(/scene\.nodes\.length > this\.states\.length/u.test(nodes), 'Node capacity overflow must fail closed.');
 assert(!/scene\.nodes\.slice\(/u.test(nodes), 'Scene nodes must not be silently truncated.');
-assert(/update\(time: number, scroll: number, immediate = false\)/u.test(nodes), 'Reduced-motion nodes need an immediate static update path.');
+assert(/update\(time: number, delta: number, scroll: number, immediate = false\)/u.test(nodes), 'Reduced-motion nodes need an immediate static update path.');
+
+/* Each section assembles in an order taken from its own geometry, and a static
+   render must land on the finished shape rather than part-way through it. */
+assert(/function arrivalOrder\(formation: Formation/u.test(nodes), 'Formations lost the assembly order that gives each section its own gathering.');
+assert(/case 'pillars':\s*case 'ring':\s*case 'spiral':\s*return t;/u.test(nodes), 'Ordered formations must assemble along their own index.');
+assert(/case 'lattice':\s*return 1 - weight;/u.test(nodes), 'The lattice must land its strongest node first.');
+assert(/state\.order = arrivalOrder\(scene\.formation/u.test(nodes), 'Section changes must re-derive the assembly order.');
+assert(/state\.origin\.copy\(state\.current\);\s*state\.travel = 0;/u.test(nodes), 'An interrupted re-formation must set out from where the nodes actually stand.');
+assert(/state\.travel = 1;\s*state\.current\.copy\(state\.target\)/u.test(nodes), 'A static render must complete the re-formation instead of freezing it mid-flight.');
+assert(/\(state\.travel - state\.order \* REFORM_STAGGER\) \/ \(1 - REFORM_STAGGER\)/u.test(nodes), 'The stagger must delay a node rather than shorten how long it moves.');
 
 assert(/from '\.\/content'/u.test(sceneNodes), 'Scene node registry must derive its labels from the content registry.');
 assert(/data-scene-target/u.test(sceneNodes) && !/nth-child/u.test(sceneNodes), 'Scene targets must use stable identifiers rather than positional selectors.');
@@ -69,7 +79,7 @@ assert(/isBlockedTarget\(/u.test(experience) && /this\.isBlockedPoint\(\)/u.test
 assert(/window\.addEventListener\('pointerup'/u.test(experience) && /private onPointerUp\(event: PointerEvent\)/u.test(experience), 'Scene activation must be committed on pointerup.');
 assert(/TAP_SLOP/u.test(experience) && /pointerDragged/u.test(experience), 'Scene activation must distinguish taps from scroll or drag gestures.');
 assert(/this\.elapsedTime \+= delta/u.test(experience), 'Scene time must remain monotonic across visibility pause/resume.');
-assert(/this\.nodes\.update\(time, this\.scroll, true\)/u.test(experience), 'Reduced motion must render nodes directly in their static final state.');
+assert(/this\.nodes\.update\(time, delta, this\.scroll, true\)/u.test(experience), 'Reduced motion must render nodes directly in their static final state.');
 assert(/impactRay\.intersectPlane/u.test(experience), 'Shockwave direction must derive from the clicked side of the core.');
 
 const shockwaveParts = [

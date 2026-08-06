@@ -340,7 +340,7 @@ export class Experience {
     this.core.update(time, delta, this.smoothMouse, this.scroll);
     this.particles.update(time, delta, this.scroll);
     this.rings.update(time, delta, this.smoothMouse, this.scroll);
-    this.nodes.update(time, this.scroll, true);
+    this.nodes.update(time, delta, this.scroll, true);
     this.postfx.render(time, delta);
   }
 
@@ -692,7 +692,7 @@ export class Experience {
     this.particles.update(time, delta, this.scroll);
     this.rings.setPassage(this.passage);
     this.rings.update(time, delta, this.smoothMouse, this.scroll);
-    this.nodes.update(time, this.scroll);
+    this.nodes.update(time, delta, this.scroll);
     this.updatePicking();
     this.postfx.render(time, delta);
 

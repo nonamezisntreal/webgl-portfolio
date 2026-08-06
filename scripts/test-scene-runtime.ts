@@ -95,27 +95,56 @@ const sceneNodes: SceneNode[] = Array.from({ length: 12 }, (_, index) => ({
 const scene: SectionScene = { formation: 'swarm', nodes: sceneNodes };
 const nodes = new Nodes(colorA, colorB, sceneNodes.length);
 nodes.setSection(scene);
-nodes.update(2.5, 0, true);
+nodes.update(2.5, 0, 0, true);
 assert(nodes.activeNodes.length === sceneNodes.length, 'Low-power scene capacity dropped content nodes.');
 
 const firstPositions = sceneNodes.map((_, index) => nodes.worldPosition(index, new THREE.Vector3()).clone());
 assert(firstPositions.some((position) => position.length() > 1), 'Immediate node update did not reach the final formation.');
-nodes.update(9.5, 0, true);
+nodes.update(9.5, 0, 0, true);
 const secondPositions = sceneNodes.map((_, index) => nodes.worldPosition(index, new THREE.Vector3()).clone());
 assert(firstPositions.every((position, index) => position.distanceTo(secondPositions[index]) < 1e-9), 'Reduced-motion node positions still drift between static renders.');
 
+/* A section is recognisable by the way it gathers, not only by the shape it
+   ends up in: the pillars stand up from the ground, and every node still has to
+   land exactly on its mark. */
+const assembly = new Nodes(colorA, colorB, sceneNodes.length);
+assembly.setSection({ formation: 'pillars', nodes: sceneNodes });
+const groundIndex = 0;
+const skyIndex = sceneNodes.length - 1;
+const rest = new THREE.Vector3();
+assembly.update(0, 0.3, 0);
+const groundStart = assembly.worldPosition(groundIndex, rest).clone();
+const skyStart = assembly.worldPosition(skyIndex, rest).clone();
+assert(groundStart.length() > skyStart.length(), 'The pillars rose as one block instead of standing up from the ground.');
+for (let frame = 0; frame < 120; frame++) assembly.update(frame * 0.016, 0.016, 0);
+const assembled = privateValue<{ travel: number; current: THREE.Vector3; target: THREE.Vector3 }[]>(assembly, 'states');
+assert(
+  assembled[skyIndex].travel === 1 && assembled[skyIndex].current.distanceTo(assembled[skyIndex].target) < 1e-6,
+  'The last node of the formation never arrived on its mark.',
+);
+
+/* Turning away mid-assembly must carry on from where the nodes stand. */
+const interrupted = new Nodes(colorA, colorB, sceneNodes.length);
+interrupted.setSection({ formation: 'ring', nodes: sceneNodes });
+interrupted.update(0, 0.25, 0);
+const caught = interrupted.worldPosition(groundIndex, rest).clone();
+assert(caught.length() > 1, 'The mid-assembly check never let the node leave the core.');
+interrupted.setSection({ formation: 'spiral', nodes: sceneNodes });
+interrupted.update(0.3, 0.016, 0);
+assert(caught.distanceTo(interrupted.worldPosition(groundIndex, rest)) < 0.25, 'A section change mid-assembly teleported the nodes instead of turning them.');
+
 const reach = new Nodes(colorA, colorB, sceneNodes.length);
 reach.setSection(scene);
-reach.update(2.5, 0, true);
+reach.update(2.5, 0, 0, true);
 const restPosition = reach.worldPosition(0, new THREE.Vector3()).clone();
 reach.setHovered(0);
 reach.setPull(new THREE.Vector3(50, 50, 50));
-reach.update(2.5, 0, true);
+reach.update(2.5, 0, 0, true);
 assert(
   restPosition.distanceTo(reach.worldPosition(0, new THREE.Vector3())) < 1e-9,
   'Static render applied the pointer reach instead of ignoring it.',
 );
-for (let frame = 0; frame < 60; frame++) reach.update(2.5, 0);
+for (let frame = 0; frame < 60; frame++) reach.update(2.5, 0.016, 0);
 assert(
   reach.worldPosition(0, new THREE.Vector3()).distanceTo(restPosition) < 0.4,
   'Pointer reach accumulated past its bound instead of staying a fixed offset.',
@@ -155,4 +184,4 @@ try {
 }
 assert(overflowRejected, 'Node capacity overflow was silently truncated instead of rejected.');
 
-console.log('Scene runtime regression tests passed: shared delta decay, static reduced motion, full capacity, bounded reach, reversible passage, hint replacement and overflow rejection.');
+console.log('Scene runtime regression tests passed: shared delta decay, static reduced motion, full capacity, ordered assembly, bounded reach, reversible passage, hint replacement and overflow rejection.');

@@ -4,6 +4,8 @@ import type { Formation, SceneNode, SectionScene } from '../scene-nodes';
 interface NodeState {
   readonly target: THREE.Vector3;
   readonly current: THREE.Vector3;
+  /** Where the node set out from when the section last changed. */
+  readonly origin: THREE.Vector3;
   /** Where the instance was actually drawn last frame — picking uses this. */
   readonly rendered: THREE.Vector3;
   readonly color: THREE.Color;
@@ -12,6 +14,10 @@ interface NodeState {
   targetScale: number;
   hover: number;
   targetHover: number;
+  /** 0..1 progress of the re-formation this node is part of. */
+  travel: number;
+  /** 0..1 place in the assembly order of its formation. */
+  order: number;
   phase: number;
   spin: number;
 }
@@ -19,6 +25,9 @@ interface NodeState {
 const GOLDEN_ANGLE = Math.PI * (1 + Math.sqrt(5));
 /** How far, in world units, a hovered node may reach toward the pointer. */
 const PULL_REACH = 0.26;
+/** Seconds a whole formation takes to assemble, and the share of that spent staggering. */
+const REFORM_SECONDS = 1.1;
+const REFORM_STAGGER = 0.45;
 
 const inverseWorld = new THREE.Matrix4();
 const localPull = new THREE.Vector3();
@@ -79,6 +88,32 @@ function layout(formation: Formation, index: number, count: number, weight: numb
 }
 
 /**
+ * The order a formation assembles in, read off the shape itself: 0 lands first,
+ * 1 last. Section identity lives in how the constellation gathers, not only in
+ * what it ends up as.
+ */
+function arrivalOrder(formation: Formation, index: number, count: number, weight: number): number {
+  const t = count > 1 ? index / (count - 1) : 0;
+  switch (formation) {
+    // pillars stand up from the ground, the ring draws itself around, the
+    // spiral unwinds one numbered step at a time
+    case 'pillars':
+    case 'ring':
+    case 'spiral':
+      return t;
+    // the ellipse fills in from the side nearest the viewer
+    case 'ellipse':
+      return (1 - Math.sin((index / count) * Math.PI * 2 + Math.PI / 4)) / 2;
+    // magnitude is what the lattice encodes, so the strongest lands first
+    case 'lattice':
+      return 1 - weight;
+    // a swarm has no order to speak of, and a collapse is over at once
+    default:
+      return 0;
+  }
+}
+
+/**
  * Interactive content layer: a pooled instanced constellation where every
  * visible node stands for one item of the active section.
  */
@@ -120,6 +155,7 @@ export class Nodes {
       this.states.push({
         target: new THREE.Vector3(),
         current: new THREE.Vector3(),
+        origin: new THREE.Vector3(),
         rendered: new THREE.Vector3(),
         color: accent.clone(),
         restColor: accent.clone(),
@@ -127,6 +163,8 @@ export class Nodes {
         targetScale: 0,
         hover: 0,
         targetHover: 0,
+        travel: 1,
+        order: 0,
         phase: (i * GOLDEN_ANGLE) % (Math.PI * 2),
         spin: 0.25 + (i % 5) * 0.11,
       });
@@ -153,14 +191,20 @@ export class Nodes {
       const state = this.states[i];
       const node = this.visible[i];
       state.targetHover = 0;
+      // the move is measured from wherever the node stands, so an interrupted
+      // re-formation carries on from where it got to rather than snapping back
+      state.origin.copy(state.current);
+      state.travel = 0;
 
       if (!node) {
         state.target.setScalar(0);
         state.targetScale = 0;
+        state.order = 0;
         continue;
       }
 
       layout(scene.formation, i, this.visible.length, node.weight, state.target);
+      state.order = arrivalOrder(scene.formation, i, this.visible.length, node.weight);
       state.targetScale = 0.78 + node.weight * 0.58;
       if (node.color) state.restColor.set(node.color);
       else state.restColor.copy(this.gradient[i]);
@@ -192,7 +236,7 @@ export class Nodes {
     return out.copy(this.states[index].rendered).applyMatrix4(this.group.matrixWorld);
   }
 
-  update(time: number, scroll: number, immediate = false): void {
+  update(time: number, delta: number, scroll: number, immediate = false): void {
     // content sections must stay readable, so the layer calms down as the page scrolls
     const fade = 1 - scroll * 0.35;
 
@@ -212,10 +256,17 @@ export class Nodes {
       const state = this.states[i];
 
       if (immediate) {
+        state.travel = 1;
         state.current.copy(state.target);
         state.hover = state.targetHover;
       } else {
-        state.current.lerp(state.target, 0.055);
+        // every node moves for the same stretch; its place in the order only
+        // decides when that stretch starts, so the shape assembles as a shape
+        state.travel = Math.min(1, state.travel + delta / REFORM_SECONDS);
+        const moved = THREE.MathUtils.clamp(
+          (state.travel - state.order * REFORM_STAGGER) / (1 - REFORM_STAGGER), 0, 1,
+        );
+        state.current.lerpVectors(state.origin, state.target, 1 - Math.pow(1 - moved, 3));
         state.hover += (state.targetHover - state.hover) * 0.14;
       }
 
