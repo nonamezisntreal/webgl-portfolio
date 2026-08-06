@@ -133,7 +133,7 @@ initReveals(reducedMotion);
 initTilt(reducedMotion);
 initCursor(reducedMotion);
 initInteractions(reducedMotion);
-initProjectCases(() => locale);
+initProjectCases(reducedMotion, () => locale);
 initContactForm(() => locale);
 
 /* Primary HTML is independent of WebGL initialization and remains usable on fallback. */

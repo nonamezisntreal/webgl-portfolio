@@ -617,10 +617,23 @@ async function runPrimary(origin, results) {
       labelledBy: document.getElementById('case-panel')?.getAttribute('aria-labelledby'),
     }))()`);
     assert(dialogOpen.open && dialogOpen.focus === 'case-close' && dialogOpen.mainInert && dialogOpen.labelledBy === 'case-title', 'Dialog focus/inert/name contract failed.');
+    const shared = await cdp.evaluate(`(() => ({
+      travelling: document.getElementById('case-panel').getAnimations().map((a) => Math.round(Number(a.effect.getComputedTiming().duration))),
+      sourceCards: document.querySelectorAll('.is-case-source').length,
+    }))()`);
+    assert(shared.travelling.includes(520) && shared.sourceCards === 1, `The case did not grow out of the card that opened it: ${JSON.stringify(shared)}`);
     await cdp.key('Escape', 'Escape');
+    /* the case is over on the keystroke; the panel shrinking back is a ghost */
     const dialogClosed = await cdp.evaluate(`(() => ({ closed: document.getElementById('case')?.getAttribute('aria-hidden') === 'true', restored: document.activeElement?.hasAttribute('data-project'), mainInert: document.getElementById('content')?.inert }))()`);
     assert(dialogClosed.closed && dialogClosed.restored && !dialogClosed.mainInert, 'Dialog close did not restore focus/background state.');
-    results.push({ id: 'BROWSER-KEYBOARD-DIALOG', status: 'PASS', details: { firstFocus, focusOutline, dialogOpen, dialogClosed } });
+    await sleep(700);
+    const dialogSettled = await cdp.evaluate(`(() => ({
+      open: document.getElementById('case').classList.contains('case--open'),
+      closing: document.getElementById('case').classList.contains('case--closing'),
+      sourceCards: document.querySelectorAll('.is-case-source').length,
+    }))()`);
+    assert(!dialogSettled.open && !dialogSettled.closing && dialogSettled.sourceCards === 0, 'The closed case left its ghost or its card behind.');
+    results.push({ id: 'BROWSER-KEYBOARD-DIALOG', status: 'PASS', details: { firstFocus, focusOutline, dialogOpen, shared, dialogClosed, dialogSettled } });
 
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: drawCounterSource });
     await cdp.send('Emulation.setEmulatedMedia', { media: '', features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
@@ -634,6 +647,20 @@ async function runPrimary(origin, results) {
     }))()`);
     assert(reduced.matches && reduced.ready && reduced.revealOpacity === '1', 'Reduced-motion contract failed.');
     assert(reduced.drawCalls > 0, 'Reduced-motion draw-call instrumentation did not observe the static render.');
+
+    /* A case opened by pointer must still hand focus to the dialog: with every
+       property transitioned, the overlay is unfocusable on the frame it opens. */
+    const reducedCase = await cdp.evaluate(`(() => {
+      document.querySelector('[data-project]').click();
+      return {
+        open: document.getElementById('case').classList.contains('case--open'),
+        focus: document.activeElement?.id,
+        overlayVisibility: getComputedStyle(document.getElementById('case')).visibility,
+      };
+    })()`);
+    assert(reducedCase.open && reducedCase.focus === 'case-close' && reducedCase.overlayVisibility === 'visible',
+      `A case opened under reduced motion left focus behind: ${JSON.stringify(reducedCase)}`);
+    await cdp.key('Escape', 'Escape');
 
     const reducedLabel = await cdp.evaluate(`document.querySelector('[data-scene-target^="stack-"]')?.textContent?.trim()`);
     const reducedNode = await discoverSceneNodes(cdp, 1440, 900, [reducedLabel]);

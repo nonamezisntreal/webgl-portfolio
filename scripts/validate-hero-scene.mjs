@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 const root = resolve(process.env.PROJECT_ROOT ?? process.cwd());
-const [particles, rings, core, postFx, experience, nodes, sceneNodes, sceneNav, intro, scroll, styles, indexHtml] = await Promise.all([
+const [particles, rings, core, postFx, experience, nodes, sceneNodes, sceneNav, intro, scroll, projects, styles, indexHtml] = await Promise.all([
   readFile(resolve(root, 'src/webgl/Particles.ts'), 'utf8'),
   readFile(resolve(root, 'src/webgl/Rings.ts'), 'utf8'),
   readFile(resolve(root, 'src/webgl/Core.ts'), 'utf8'),
@@ -13,6 +13,7 @@ const [particles, rings, core, postFx, experience, nodes, sceneNodes, sceneNav, 
   readFile(resolve(root, 'src/ui/sceneNav.ts'), 'utf8'),
   readFile(resolve(root, 'src/ui/intro.ts'), 'utf8'),
   readFile(resolve(root, 'src/ui/scroll.ts'), 'utf8'),
+  readFile(resolve(root, 'src/ui/projects.ts'), 'utf8'),
   readFile(resolve(root, 'src/styles/main.css'), 'utf8'),
   readFile(resolve(root, 'index.html'), 'utf8'),
 ]);
@@ -157,6 +158,19 @@ assert(/dispose\(\)/u.test(intro) && /removeEngagementListeners\(\)/u.test(intro
   'Intro teardown must release global listeners.');
 assert(!/dataset|classList/u.test(intro),
   'Hero visibility must not depend on the runtime: the activation module may not stage the document.');
+
+/* ── The case a project card turns into ── */
+
+assert(/is-case-source/u.test(projects) && /panel\.animate\(/u.test(projects),
+  'A case must grow out of the card that opened it, and that card must step aside while it does.');
+assert(/if \(reducedMotion \|\| !card\) return null;/u.test(projects),
+  'Reduced motion must open the case where it stands instead of flying it in.');
+assert(/const close = \(\) => \{[\s\S]*?setBackgroundInert\(false\);[\s\S]*?lastFocused\?\.focus\(\);[\s\S]*?case--closing/u.test(projects),
+  'Closing must hand the page back before the panel animates out: the outro is a ghost, not a gate.');
+assert(/\.case--closing \{ visibility: visible; pointer-events: none; \}/u.test(styles),
+  'The outro must stay visible without catching pointers meant for the page behind it.');
+assert(/\.case \{ transition-property: none !important; \}/u.test(styles),
+  'Under reduced motion every property is transitioned, visibility included, which leaves the case unfocusable as it opens.');
 
 /* ── Passage out of the hero ── */
 

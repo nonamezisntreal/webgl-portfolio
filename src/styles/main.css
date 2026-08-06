@@ -1066,6 +1066,13 @@ html[lang='en'] .lang-toggle::before { transform: translateX(100%); }
 
 .case--open { visibility: visible; pointer-events: auto; }
 
+/* The panel shrinking back into its card is a ghost: the case is already closed,
+   inert is already lifted and focus is already back on the page. */
+.case--closing { visibility: visible; pointer-events: none; }
+
+/* while the case is that card, the card itself steps aside */
+.is-case-source { opacity: 0; }
+
 .case__backdrop {
   position: absolute;
   inset: 0;
@@ -1589,4 +1596,7 @@ html[lang='en'] .lang-toggle::before { transform: translateX(100%); }
   /* the hero arrives already open: its staged beats are motion, not content */
   .hero .reveal,
   .hero__title .reveal { animation: none; clip-path: none; }
+  /* The blanket duration above applies to every property, visibility included,
+     which leaves a case unfocusable on the frame it opens. */
+  .case { transition-property: none !important; }
 }
