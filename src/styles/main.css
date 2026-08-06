@@ -659,6 +659,41 @@ html[lang='en'] .lang-toggle::before { transform: translateX(100%); }
   transform: none;
 }
 
+/* ── Hero activation ──────────────────────────────────────────
+   Live only while JS drives it: with no marker on the document the hero
+   renders in its ordinary state, which is also where the activation ends. */
+[data-intro] .hero .reveal {
+  opacity: 0;
+  transform: none;
+  transition: none;
+}
+
+[data-intro] .hero__title .hero__line {
+  clip-path: inset(0 100% 0 0);
+}
+
+/* the name opens under a horizontal mask, second line a beat behind; the caret
+   lives inside the accent line, so the mask uncovers it last on its own */
+[data-intro].is-intro-title .hero__title .reveal {
+  opacity: 1;
+}
+
+[data-intro].is-intro-title .hero__title .hero__line {
+  clip-path: inset(0 0 0 0);
+  transition: clip-path 620ms var(--ease-out);
+}
+
+[data-intro].is-intro-title .hero__line--accent {
+  transition-delay: 160ms;
+}
+
+/* then the rest of the hero materialises in its reading order */
+[data-intro].is-intro-interface .hero .reveal {
+  opacity: 1;
+  transition: opacity 420ms var(--ease-out);
+  transition-delay: calc(var(--i, 0) * 70ms);
+}
+
 /* ── Buttons ──────────────────────────────────────────────── */
 .btn {
   position: relative;

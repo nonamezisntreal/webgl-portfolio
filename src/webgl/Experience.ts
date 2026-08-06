@@ -284,6 +284,21 @@ export class Experience {
     return true;
   }
 
+  /**
+   * Scripted activation pulse, aimed straight down the camera axis so the core
+   * lights up evenly as the page opens. It is the same strike a click sends,
+   * and like that one it decays per frame, so reduced motion never fires it.
+   */
+  ignite(): void {
+    if (this.disposed || this.contextLost || this.reducedMotion) return;
+    this.core.group.getWorldPosition(this.coreCenter);
+    this.cameraFacing.copy(this.camera.position).sub(this.coreCenter).normalize();
+    this.core.impact(this.cameraFacing, 0.8);
+    this.particles.impulse(0.65);
+    this.rings.pulse(0.9);
+    this.postfx.flash(0.55);
+  }
+
   /** Drop any node focus and let the camera return to its scroll position. */
   releaseFocus(): void {
     this.focusIndex = -1;

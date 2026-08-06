@@ -10,6 +10,7 @@ import { initProjectCases } from './ui/projects';
 import { initContactForm } from './ui/contact';
 import { initInteractions, bindMagnetic } from './ui/interactions';
 import { initSceneNav, type SceneNav } from './ui/sceneNav';
+import { initIntro } from './ui/intro';
 import { sectionScenes } from './scene-nodes';
 import { Experience } from './webgl/Experience';
 
@@ -123,6 +124,11 @@ function applyLocale(currentLocale: Locale): void {
 /* Locale is declared by the physical HTML artifact and verified against its canonical route. */
 applyLocale(locale);
 
+/* The activation is choreography over an already usable page, so it starts
+   before the scene and ignites it only if one came up in time. */
+let ignite = (): void => {};
+const intro = initIntro({ reducedMotion, onIgnite: () => ignite() });
+
 /* UI layer works even if WebGL fails. */
 initReveals(reducedMotion);
 initTilt(reducedMotion);
@@ -151,6 +157,7 @@ async function boot(): Promise<void> {
       onNodeHover: (pointer) => nav?.hover(pointer),
       onNodeSelect: (pointer) => nav?.select(pointer),
     });
+    ignite = () => experience.ignite();
     try {
       nav = initSceneNav({
         reducedMotion,
@@ -159,6 +166,7 @@ async function boot(): Promise<void> {
         onRelease: () => experience.releaseFocus(),
         onDomHover: (id) => experience.setDomHover(id),
         onHint: (active) => experience.hint(active),
+        hasEngaged: () => intro.engaged,
       });
     } catch (error) {
       experience.dispose();
@@ -209,5 +217,8 @@ function hideLoader(): void {
   }, 250);
 }
 
-window.addEventListener('pagehide', () => disposeExperience?.(), { once: true });
+window.addEventListener('pagehide', () => {
+  intro.skip();
+  disposeExperience?.();
+}, { once: true });
 boot();

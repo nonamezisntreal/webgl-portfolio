@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 const root = resolve(process.env.PROJECT_ROOT ?? process.cwd());
-const [particles, rings, core, postFx, experience, nodes, sceneNodes, sceneNav, indexHtml] = await Promise.all([
+const [particles, rings, core, postFx, experience, nodes, sceneNodes, sceneNav, intro, indexHtml] = await Promise.all([
   readFile(resolve(root, 'src/webgl/Particles.ts'), 'utf8'),
   readFile(resolve(root, 'src/webgl/Rings.ts'), 'utf8'),
   readFile(resolve(root, 'src/webgl/Core.ts'), 'utf8'),
@@ -11,6 +11,7 @@ const [particles, rings, core, postFx, experience, nodes, sceneNodes, sceneNav, 
   readFile(resolve(root, 'src/webgl/Nodes.ts'), 'utf8'),
   readFile(resolve(root, 'src/scene-nodes.ts'), 'utf8'),
   readFile(resolve(root, 'src/ui/sceneNav.ts'), 'utf8'),
+  readFile(resolve(root, 'src/ui/intro.ts'), 'utf8'),
   readFile(resolve(root, 'index.html'), 'utf8'),
 ]);
 
@@ -121,7 +122,7 @@ const pointerDownBody = /private onPointerDown\([\s\S]*?\n {2}\}/u.exec(experien
 assert(/this\.hintIndex = -1;/u.test(pointerDownBody), 'A press must never resolve an idle hint into a selection.');
 
 assert(/DEMO_DELAY_MS/u.test(sceneNav) && /DEMO_HOLD_MS/u.test(sceneNav), 'The idle demonstration lost its timing contract.');
-assert(/ACTIVITY_EVENTS/u.test(sceneNav) && /engaged = true/u.test(sceneNav), 'The demonstration must stand down once the visitor acts on their own.');
+assert(/hasEngaged\(\)/u.test(sceneNav), 'The demonstration must stand down once the visitor acts on their own.');
 assert(/window\.clearTimeout\(demoTimer\)/u.test(sceneNav), 'The demonstration must not outlive the scene it belongs to.');
 assert(/if \(!pointer\.hint\) cursor/u.test(sceneNav), 'A hint must not pretend the cursor is on the node.');
 assert(/scene-tip--hint/u.test(sceneNav), 'A hinted label must be distinguishable from a hovered one.');
@@ -130,7 +131,21 @@ const selectBody = /select\(pointer\) \{[\s\S]*?\n {4}\},/u.exec(sceneNav)?.[0] 
 assert(/if \(reducedMotion\)/u.test(selectBody) && /signal\(pointer, target\)/u.test(selectBody),
   'The travelling signal is motion and must stay out of the reduced-motion path.');
 
-assert(!/scene-guide/u.test(indexHtml) && !/scene-pulse/u.test(indexHtml), 'Scene onboarding must be created at runtime without changing static index markup.');
+/* ── Hero activation: choreography over an already usable page ── */
+
+const igniteBody = /ignite\(\): void \{[\s\S]*?\n {2}\}/u.exec(experience)?.[0] ?? '';
+assert(/this\.reducedMotion/u.test(igniteBody), 'The activation pulse decays per frame and must stay out of reduced motion.');
+assert(/if \(reducedMotion \|\| hasBeenActive\(\)\)/u.test(intro),
+  'Neither reduced motion nor a visitor who already acted may have the activation staged for them.');
+assert(/SKIP_EVENTS/u.test(intro) && /removeEventListener\(type, markActed\)/u.test(intro),
+  'The activation must end the moment the visitor acts, and let go of its listeners.');
+assert(/navigator\.userActivation/u.test(intro) && /activation\?\.hasBeenActive/u.test(intro),
+  'A gesture that landed before this bundle ran still counts as the visitor having acted.');
+assert(/delete root\.dataset\.intro/u.test(intro), 'A finished activation must leave the page carrying no intro state.');
+assert(/sessionStorage/u.test(intro) && /REPEAT_SCALE/u.test(intro), 'A repeat visit in the same session must not sit through the full activation.');
+
+assert(!/scene-guide/u.test(indexHtml) && !/scene-pulse/u.test(indexHtml) && !/data-intro/u.test(indexHtml),
+  'Scene onboarding and activation state must be applied at runtime without changing static index markup.');
 assert(/<canvas id="gl" aria-hidden="true">/u.test(indexHtml), 'The scene must remain a shortcut: the canvas stays out of the accessibility tree.');
 
 console.log('Validated hero scene contract: intrusive spherical comets absent; core, shader particles, rings, shards and bloom preserved; interactive node layer, picking, shockwave, DOM navigation bridge and two-way hover link intact.');

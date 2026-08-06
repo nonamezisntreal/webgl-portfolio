@@ -10,8 +10,6 @@ const DEMO_HOLD_MS = 1300;
 const PULSE_MS = 700;
 /** Where the smooth scroll parks the target: see scrollToElement. */
 const SCROLL_OFFSET = 90;
-/** Anything here means the visitor is exploring on their own already. */
-const ACTIVITY_EVENTS = ['pointerdown', 'wheel', 'keydown', 'touchstart'] as const;
 
 export interface SceneGuideCopy {
   title: string;
@@ -40,6 +38,8 @@ export interface SceneNavOptions {
   onDomHover: (id: string | null) => void;
   /** Ask the scene to point one node out; false means it had nothing to show. */
   onHint: (active: boolean) => boolean;
+  /** Whether the visitor has already acted, tracked from the earliest moment. */
+  hasEngaged: () => boolean;
 }
 
 interface SceneTargets {
@@ -99,6 +99,7 @@ export function initSceneNav({
   onRelease,
   onDomHover,
   onHint,
+  hasEngaged,
 }: SceneNavOptions): SceneNav {
   const targets = assertSceneTargets(scenes);
 
@@ -223,24 +224,9 @@ export function initSceneNav({
    */
   let demoTimer = 0;
   let demoHold = 0;
-  let engaged = false;
-
-  const stopDemo = (): void => {
-    window.clearTimeout(demoTimer);
-    window.clearTimeout(demoHold);
-    onHint(false);
-  };
-
-  const handleActivity = (): void => {
-    if (engaged) return;
-    engaged = true;
-    stopDemo();
-    for (const type of ACTIVITY_EVENTS) window.removeEventListener(type, handleActivity);
-  };
-  for (const type of ACTIVITY_EVENTS) window.addEventListener(type, handleActivity, { passive: true });
 
   demoTimer = window.setTimeout(() => {
-    if (disposed || engaged || activeSection !== 'hero') return;
+    if (disposed || hasEngaged() || activeSection !== 'hero') return;
     if (!onHint(true)) return;
     demoHold = window.setTimeout(() => onHint(false), DEMO_HOLD_MS);
   }, DEMO_DELAY_MS);
@@ -324,7 +310,6 @@ export function initSceneNav({
       disposed = true;
       document.removeEventListener('keydown', handleKeydown);
       document.removeEventListener('pointerover', handlePointerOver);
-      for (const type of ACTIVITY_EVENTS) window.removeEventListener(type, handleActivity);
       window.clearTimeout(demoTimer);
       window.clearTimeout(demoHold);
       clearHighlight();
