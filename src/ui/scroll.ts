@@ -2,6 +2,8 @@ import Lenis from 'lenis';
 
 export interface ScrollCallbacks {
   onProgress: (progress: number) => void;
+  /** 0 at rest, peaking halfway out of the hero: see crossing() below. */
+  onPassage: (crossing: number) => void;
   onSection: (name: string) => void;
 }
 
@@ -39,10 +41,25 @@ export function initScroll(reducedMotion: boolean, callbacks: ScrollCallbacks): 
   // progress
   const progressBar = document.getElementById('progress');
   const header = document.getElementById('header');
+  const hero = document.getElementById('hero');
+
+  /**
+   * Leaving the hero is a passage, not a state: the weight rises as the hero
+   * scrolls away and returns to nothing once the next section owns the view,
+   * so scrolling back up plays it in reverse instead of leaving it stuck.
+   */
+  const crossing = (): number => {
+    const span = hero?.offsetHeight ?? window.innerHeight;
+    if (span <= 0) return 0;
+    const travelled = Math.min(1, Math.max(0, window.scrollY / span));
+    return Math.sin(Math.PI * travelled);
+  };
+
   const updateProgress = () => {
     const max = document.documentElement.scrollHeight - window.innerHeight;
     const p = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
     callbacks.onProgress(p);
+    callbacks.onPassage(crossing());
     if (progressBar) progressBar.style.transform = `scaleX(${p})`;
     header?.classList.toggle('header--scrolled', window.scrollY > 40);
   };

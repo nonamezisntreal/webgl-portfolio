@@ -178,6 +178,7 @@ async function boot(): Promise<void> {
 
     initScroll(reducedMotion, {
       onProgress: (p) => experience.setScroll(p),
+      onPassage: (crossing) => experience.setPassage(crossing),
       onSection: (name) => {
         experience.setSection(name);
         nav?.setSection(name);
@@ -192,7 +193,7 @@ async function boot(): Promise<void> {
     console.warn('WebGL experience disabled:', err);
     document.documentElement.classList.add('webgl-fallback');
     canvas.remove();
-    initScroll(reducedMotion, { onProgress: () => {}, onSection: () => {} });
+    initScroll(reducedMotion, { onProgress: () => {}, onPassage: () => {}, onSection: () => {} });
   }
 }
 

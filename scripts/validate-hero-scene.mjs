@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 const root = resolve(process.env.PROJECT_ROOT ?? process.cwd());
-const [particles, rings, core, postFx, experience, nodes, sceneNodes, sceneNav, intro, styles, indexHtml] = await Promise.all([
+const [particles, rings, core, postFx, experience, nodes, sceneNodes, sceneNav, intro, scroll, styles, indexHtml] = await Promise.all([
   readFile(resolve(root, 'src/webgl/Particles.ts'), 'utf8'),
   readFile(resolve(root, 'src/webgl/Rings.ts'), 'utf8'),
   readFile(resolve(root, 'src/webgl/Core.ts'), 'utf8'),
@@ -12,6 +12,7 @@ const [particles, rings, core, postFx, experience, nodes, sceneNodes, sceneNav, 
   readFile(resolve(root, 'src/scene-nodes.ts'), 'utf8'),
   readFile(resolve(root, 'src/ui/sceneNav.ts'), 'utf8'),
   readFile(resolve(root, 'src/ui/intro.ts'), 'utf8'),
+  readFile(resolve(root, 'src/ui/scroll.ts'), 'utf8'),
   readFile(resolve(root, 'src/styles/main.css'), 'utf8'),
   readFile(resolve(root, 'index.html'), 'utf8'),
 ]);
@@ -156,6 +157,17 @@ assert(/dispose\(\)/u.test(intro) && /removeEngagementListeners\(\)/u.test(intro
   'Intro teardown must release global listeners.');
 assert(!/dataset|classList/u.test(intro),
   'Hero visibility must not depend on the runtime: the activation module may not stage the document.');
+
+/* ── Passage out of the hero ── */
+
+assert(/setPassage\(value: number\): void/u.test(rings) && /ringDrift/u.test(rings) && /ringTilt/u.test(rings),
+  'The passage must move the rings from their resting tilt without fighting the wander accumulated beside it.');
+assert(/setPassage\(value: number\): void \{[\s\S]*?this\.reducedMotion \? 0/u.test(experience),
+  'Reduced motion must keep its distance from the passage instead of being flown through it.');
+assert(/PASSAGE_DIVE/u.test(experience) && /this\.rings\.setPassage\(this\.passage\)/u.test(experience),
+  'The camera and the rings must cross the passage together, or neither reads as a passage.');
+assert(/onPassage/u.test(scroll) && /Math\.sin\(Math\.PI \* travelled\)/u.test(scroll),
+  'Leaving the hero must return to rest, so scrolling back plays the crossing in reverse.');
 
 assert(/@keyframes hero-arrive/u.test(styles) && /@keyframes hero-open/u.test(styles),
   'The hero must carry its own arrival, so it plays from the first painted frame.');

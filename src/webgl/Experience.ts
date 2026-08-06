@@ -20,6 +20,8 @@ const FOCUS_HOLD = 0.9;
 const CAMERA_DISTANCE = 6.2;
 /** Horizontal world radius the node formations are expected to fit within. */
 const FORMATION_REACH = 2.6;
+/** How far the camera leans into the composition while crossing out of the hero. */
+const PASSAGE_DIVE = 0.9;
 
 export interface NodePointer {
   node: SceneNode;
@@ -63,6 +65,9 @@ export class Experience {
   private readonly sectionOffset = new THREE.Vector3();
   private readonly targetSectionOffset = new THREE.Vector3();
   private scroll = 0;
+  /** Live and target crossing weight for the hero → page passage. */
+  private passage = 0;
+  private targetPassage = 0;
 
   private readonly scenes: Record<SceneSection, SectionScene>;
   private readonly pointerClient = new THREE.Vector2(-1e4, -1e4);
@@ -181,6 +186,15 @@ export class Experience {
 
   setScroll(progress: number): void {
     this.scroll = Math.min(1, Math.max(0, progress));
+  }
+
+  /**
+   * Crossing weight for the passage out of the hero: the camera leans in, the
+   * rings turn square to it and open past the frame, then everything settles
+   * once the next section owns the view. Reduced motion keeps its distance.
+   */
+  setPassage(value: number): void {
+    this.targetPassage = this.reducedMotion ? 0 : Math.min(1, Math.max(0, value));
   }
 
   setSection(name: string): void {
@@ -643,10 +657,12 @@ export class Experience {
     const focusing = this.focusIndex >= 0 && this.focusHold > 0 && !this.reducedMotion;
     this.focusWeight += ((focusing ? 1 : 0) - this.focusWeight) * 0.08;
 
+    this.passage += (this.targetPassage - this.passage) * 0.1;
+
     this.cameraBase.set(
       this.smoothMouse.x * 0.55 + this.sectionOffset.x,
       this.smoothMouse.y * 0.35 + this.sectionOffset.y - this.scroll * 0.4,
-      CAMERA_DISTANCE + this.sectionOffset.z + this.scroll * 2.4,
+      CAMERA_DISTANCE + this.sectionOffset.z + this.scroll * 2.4 - this.passage * PASSAGE_DIVE,
     );
     this.lookTarget.set(0, 0, 0);
 
@@ -671,9 +687,10 @@ export class Experience {
       this.nodes.setPull(null);
     }
 
-    this.postfx.setBloomScale(1 - this.scroll * 0.45);
+    this.postfx.setBloomScale((1 - this.scroll * 0.45) * (1 + this.passage * 0.12));
     this.core.update(time, delta, this.smoothMouse, this.scroll);
     this.particles.update(time, delta, this.scroll);
+    this.rings.setPassage(this.passage);
     this.rings.update(time, delta, this.smoothMouse, this.scroll);
     this.nodes.update(time, this.scroll);
     this.updatePicking();

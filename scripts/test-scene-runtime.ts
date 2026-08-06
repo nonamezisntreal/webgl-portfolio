@@ -45,6 +45,28 @@ rings.update(0, 0.05, mouse, 0);
 const ringAfterReset = privateValue<number>(rings, 'pulseValue');
 assert(ringAfterReset < ringBeforeReset, 'Ring pulse stopped decaying when absolute time moved backwards.');
 
+/* The passage is a position on the page, not an accumulated effect: crossing it
+   and scrolling back must leave the rings exactly where they were found. */
+const gate = new Rings(colorA, colorB);
+const gateRings = privateValue<THREE.Mesh[]>(gate, 'rings');
+gate.update(10, 0.016, mouse, 0);
+const restTilt = gateRings[2].rotation.x;
+gate.setPassage(1);
+gate.update(10, 0.016, mouse, 0);
+assert(gateRings[2].position.z > 1, 'The outer ring stayed put instead of riding past the viewer.');
+assert(gateRings[2].position.z > gateRings[0].position.z, 'The rings moved as one shell instead of the outer one leading.');
+assert(Math.abs(gateRings[2].rotation.x) < Math.abs(restTilt) * 0.5, 'The ring stayed edge-on instead of turning to face the crossing.');
+gate.setPassage(4);
+gate.update(10, 0.016, mouse, 0);
+const clampedReach = gateRings[2].position.z;
+gate.setPassage(1);
+gate.update(10, 0.016, mouse, 0);
+assert(Math.abs(gateRings[2].position.z - clampedReach) < 1e-9, 'Passage weight beyond its range carried the rings further.');
+gate.setPassage(0);
+gate.update(10, 0.016, mouse, 0);
+assert(Math.abs(gateRings[2].rotation.x - restTilt) < 1e-9 && Math.abs(gateRings[2].position.z) < 1e-9,
+  'Scrolling back out of the passage left the rings displaced.');
+
 const postFx = Object.create(PostFX.prototype) as PostFX;
 Object.assign(postFx as unknown as Record<string, unknown>, {
   baseBloom: 1,
@@ -133,4 +155,4 @@ try {
 }
 assert(overflowRejected, 'Node capacity overflow was silently truncated instead of rejected.');
 
-console.log('Scene runtime regression tests passed: shared delta decay, static reduced motion, full capacity, bounded reach, hint replacement and overflow rejection.');
+console.log('Scene runtime regression tests passed: shared delta decay, static reduced motion, full capacity, bounded reach, reversible passage, hint replacement and overflow rejection.');

@@ -9,6 +9,11 @@ export class Rings {
 
   private rings: THREE.Mesh[] = [];
   private ringOpacity: number[] = [];
+  /** Resting tilt of each ring, kept apart from the wander accumulated below. */
+  private ringTilt: number[] = [];
+  private ringDrift: number[] = [];
+  /** 0..1 — how far the viewer is into the passage between hero and page. */
+  private passage = 0;
   private shards: THREE.Mesh[] = [];
   private shardData: { radius: number; speed: number; y: number; phase: number; rot: number }[] = [];
   private pulseValue = 0;
@@ -34,6 +39,8 @@ export class Rings {
       ring.rotation.x = Math.PI / 2 + cfg.tilt;
       this.rings.push(ring);
       this.ringOpacity.push(cfg.opacity);
+      this.ringTilt.push(cfg.tilt);
+      this.ringDrift.push(0);
       this.group.add(ring);
     }
 
@@ -69,17 +76,34 @@ export class Rings {
     this.pulseValue = Math.min(1, strength);
   }
 
+  /**
+   * How far the viewer is into the passage out of the hero: the rings turn to
+   * face them and ride past, then settle back once the crossing is behind.
+   * A position, not a decay — it reads the same on a static frame.
+   */
+  setPassage(value: number): void {
+    this.passage = Math.min(1, Math.max(0, value));
+  }
+
   update(time: number, delta: number, mouse: THREE.Vector2, scroll: number): void {
     this.pulseValue *= Math.exp(-delta * 2.4);
+    const flare = Math.sin(Math.PI * this.passage);
 
     for (let i = 0; i < this.rings.length; i++) {
       const ring = this.rings[i];
       const dir = i % 2 === 0 ? 1 : -1;
+      const tilt = this.ringTilt[i];
       ring.rotation.z = time * 0.05 * dir;
-      ring.rotation.x += (mouse.y * 0.0006 - scroll * 0.0002) * dir;
+      this.ringDrift[i] += (mouse.y * 0.0006 - scroll * 0.0002) * dir;
+      // edge-on at rest, square to the viewer at the moment of crossing
+      ring.rotation.x = this.ringDrift[i]
+        + THREE.MathUtils.lerp(Math.PI / 2 + tilt, tilt * 0.25, this.passage);
+      // they ride toward the viewer and thin out as they arrive, outer ring first
+      const reach = this.passage * (0.45 + i * 0.28);
+      ring.position.z = reach * 4.2;
       ring.scale.setScalar(1 + this.pulseValue * 0.14);
       (ring.material as THREE.MeshBasicMaterial).opacity =
-        this.ringOpacity[i] * (1 + this.pulseValue * 2.6);
+        this.ringOpacity[i] * (1 + this.pulseValue * 2.6) * (1 + flare * 1.4) * (1 - reach * 0.7);
     }
 
     for (let i = 0; i < this.shards.length; i++) {
