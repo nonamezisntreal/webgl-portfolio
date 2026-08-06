@@ -148,6 +148,7 @@ async function withHeroSourceMutation(mutate) {
     await mkdir(resolve(root, 'src/ui'), { recursive: true });
     await cp(resolve(projectRoot, 'src/scene-nodes.ts'), resolve(root, 'src/scene-nodes.ts'));
     await cp(resolve(projectRoot, 'src/ui/sceneNav.ts'), resolve(root, 'src/ui/sceneNav.ts'));
+    await cp(resolve(projectRoot, 'src/ui/intro.ts'), resolve(root, 'src/ui/intro.ts'));
     await cp(resolve(projectRoot, 'index.html'), resolve(root, 'index.html'));
     await mutate(root);
     return nodeResult(validators.hero, { PROJECT_ROOT: root });
@@ -583,7 +584,7 @@ const cases = [
   workflowCase('ADV-074', 'pull_request_target trigger', 'pull_request_target is forbidden', async (_root, file) => {
     await mutateText(file, (source) => source.replace('  pull_request:\n', '  pull_request:\n  pull_request_target:\n'));
   }),
-  workflowCase('ADV-075', 'required review artifact step removed', 'Build job must contain exactly 7 approved steps', async (_root, file) => {
+  workflowCase('ADV-075', 'required review artifact step removed', 'Build job must contain exactly 8 approved steps', async (_root, file) => {
     await mutateText(file, (source) => source.replace(/\n      - name: Upload review artifact[\s\S]*?retention-days: 7\n/, '\n'));
   }),
   workflowCase('ADV-076', 'review artifact missing files do not fail', 'input if-no-files-found is incorrect', async (_root, file) => {

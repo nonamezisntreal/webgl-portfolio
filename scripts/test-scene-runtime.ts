@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Core } from '../src/webgl/Core';
+import { Experience } from '../src/webgl/Experience';
 import { Nodes } from '../src/webgl/Nodes';
 import { Particles } from '../src/webgl/Particles';
 import { PostFX } from '../src/webgl/PostFX';
@@ -98,6 +99,31 @@ assert(
   'Pointer reach accumulated past its bound instead of staying a fixed offset.',
 );
 
+let fakeHovered = 0;
+const interaction = Object.create(Experience.prototype) as Experience;
+Object.assign(interaction as unknown as Record<string, unknown>, {
+  disposed: false,
+  contextLost: false,
+  reducedMotion: false,
+  hintIndex: 0,
+  hoverIndex: 0,
+  domHoverIndex: -1,
+  nodes: {
+    activeNodes: [{ id: 'dom-node', label: 'DOM node', target: '[data-dom-node]', weight: 0.5 }],
+    setHovered(index: number) { fakeHovered = index; },
+    setPull() {},
+  },
+  postfx: { setAtmosphere() {} },
+  atmosphereColor: new THREE.Color(),
+  onNodeHover: () => {},
+});
+interaction.setDomHover('dom-node');
+assert(privateValue<number>(interaction, 'hintIndex') === -1, 'DOM hover did not cancel the active idle hint.');
+assert(privateValue<number>(interaction, 'domHoverIndex') === 0, 'DOM hover did not claim its scene node.');
+assert(privateValue<number>(interaction, 'hoverIndex') === 0 && fakeHovered === 0, 'DOM hover lost its node while replacing the hint.');
+interaction.hint(false);
+assert(privateValue<number>(interaction, 'hoverIndex') === 0 && fakeHovered === 0, 'The expired hint timer cleared a newer DOM hover.');
+
 const undersized = new Nodes(colorA, colorB, 1);
 let overflowRejected = false;
 try {
@@ -107,4 +133,4 @@ try {
 }
 assert(overflowRejected, 'Node capacity overflow was silently truncated instead of rejected.');
 
-console.log('Scene runtime regression tests passed: shared delta decay, static reduced motion, full capacity and overflow rejection.');
+console.log('Scene runtime regression tests passed: shared delta decay, static reduced motion, full capacity, bounded reach, hint replacement and overflow rejection.');

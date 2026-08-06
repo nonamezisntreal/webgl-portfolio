@@ -389,6 +389,59 @@ const drawCounterSource = `(() => {
   }
 })();`;
 
+async function waitForIdleHint(cdp, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const hint = await cdp.evaluate(`(() => ({
+      visible: document.querySelector('.scene-tip--hint')?.classList.contains('scene-tip--visible') ?? false,
+      label: document.querySelector('.scene-tip--hint')?.textContent?.trim() ?? null,
+      linked: document.querySelectorAll('.is-scene-linked').length,
+      guideActive: document.querySelector('.scene-guide')?.classList.contains('scene-guide--active') ?? false,
+    }))()`);
+    if (hint.visible) return hint;
+    await sleep(100);
+  }
+  return null;
+}
+
+async function runIdleRegression(origin, results) {
+  const browser = await launchChrome();
+  const { cdp } = browser;
+  try {
+    await setViewport(cdp, 1440, 900);
+    await cdp.navigate(`${origin}${basePath}`);
+    const before = await waitForIdleHint(cdp);
+    assert(before?.visible && before.linked === 1 && before.guideActive, 'Idle demonstration did not reach its complete visible state.');
+
+    const after = await cdp.evaluate(`(() => {
+      const button = document.getElementById('hero-primary');
+      const rect = button.getBoundingClientRect();
+      button.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 1,
+        pointerType: 'mouse',
+        isPrimary: true,
+        button: 0,
+        buttons: 1,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2,
+      }));
+      return {
+        hintVisible: document.querySelector('.scene-tip--hint')?.classList.contains('scene-tip--visible') ?? false,
+        tipVisible: document.querySelector('.scene-tip')?.classList.contains('scene-tip--visible') ?? false,
+        linked: document.querySelectorAll('.is-scene-linked').length,
+        guideActive: document.querySelector('.scene-guide')?.classList.contains('scene-guide--active') ?? false,
+      };
+    })()`);
+    assert(!after.hintVisible && !after.tipVisible && after.linked === 0 && !after.guideActive,
+      'A normal CTA press left part of the idle demonstration active.');
+    results.push({ id: 'BROWSER-IDLE-CANCEL', status: 'PASS', details: { before, after } });
+  } finally {
+    await browser.close();
+  }
+}
+
 function collectDiagnostics(cdp, origin) {
   const consoleErrors = [];
   const networkFailures = [];
@@ -534,12 +587,13 @@ async function runPrimary(origin, results) {
     assert(guideHover.active && guideHover.action?.includes(swipeLabel), 'Scene onboarding did not identify the hovered node and its action.');
     await dispatchTouch(cdp, 'touchStart', [tapPoint]);
     await dispatchTouch(cdp, 'touchEnd', []);
-    await sleep(300);
+    await sleep(760);
     const afterTap = await cdp.evaluate(`(() => ({
       highlighted: document.querySelectorAll('.is-scene-target').length,
       scrollY: window.scrollY,
     }))()`);
-    assert(afterTap.highlighted === 1, 'A valid tap did not activate the scene node.');
+    assert(afterTap.highlighted === 1 && afterTap.scrollY > 0,
+      `A valid tap did not complete scene navigation: ${JSON.stringify(afterTap)}`);
     results.push({ id: 'BROWSER-MOBILE-SCENE-GESTURES', status: 'PASS', details: { expected: expectedStackLabels.length, discovered: Object.keys(mobileNodes).length, swipeLabel, afterSwipe, afterTap } });
 
     await setViewport(cdp, 1440, 900);
@@ -575,7 +629,7 @@ async function runPrimary(origin, results) {
       matches: matchMedia('(prefers-reduced-motion: reduce)').matches,
       ready: document.body.classList.contains('is-ready'),
       revealOpacity: getComputedStyle(document.querySelector('.reveal')).opacity,
-      animationDuration: getComputedStyle(document.querySelector('.loader__ring') || document.body).animationDuration,
+      bodyAnimationDuration: getComputedStyle(document.body).animationDuration,
       drawCalls: window.__sceneDrawCalls,
     }))()`);
     assert(reduced.matches && reduced.ready && reduced.revealOpacity === '1', 'Reduced-motion contract failed.');
@@ -686,9 +740,9 @@ async function runNoJs(origin, results) {
       hasH1: /<h1\b/iu.test(rootHtml),
       hasMain: /<main\b[^>]*\bid=["']content["']/iu.test(rootHtml),
       englishHref: rootHtml.includes(`href="${basePath}en/"`),
-      loaderNonBlockingCss: rootHtml.includes('pointer-events:none'),
+      loaderAbsent: !/<[^>]+\bid=["']loader["']/iu.test(rootHtml),
     };
-    assert(noJs.langRu && noJs.hasH1 && noJs.hasMain && noJs.englishHref && noJs.loaderNonBlockingCss, 'Homepage no-JS fallback contract failed.');
+    assert(noJs.langRu && noJs.hasH1 && noJs.hasMain && noJs.englishHref && noJs.loaderAbsent, 'Homepage no-JS fallback contract failed.');
     await browser.cdp.screenshot(resolve(artifactDir, 'no-js-homepage.png'));
 
     await browser.cdp.navigate(`${origin}${basePath}en/`);
@@ -701,7 +755,7 @@ async function runNoJs(origin, results) {
       localizedShell: englishHomeHtml.includes('available for projects') && englishHomeHtml.includes('Language selection'),
       activeEnInert: /<span\b[^>]*data-lang-pill=["']en["'][^>]*aria-current=["']page["'][^>]*>EN<\/span>/iu.test(englishHomeHtml),
       russianHref: englishHomeHtml.includes(`href="${basePath}"`),
-      loaderNonBlockingCss: englishHomeHtml.includes('pointer-events:none'),
+      loaderAbsent: !/<[^>]+\bid=["']loader["']/iu.test(englishHomeHtml),
     };
     assert(Object.values(englishNoJs).every(Boolean), 'English homepage no-JS localized shell contract failed.');
     await browser.cdp.screenshot(resolve(artifactDir, 'no-js-english-homepage.png'));
@@ -728,6 +782,7 @@ const origin = configuredOrigin ?? localSite.origin;
 const results = [];
 let failure;
 try {
+  await runIdleRegression(origin, results);
   await runPrimary(origin, results);
   await runFallback(origin, results);
   await runNoJs(origin, results);

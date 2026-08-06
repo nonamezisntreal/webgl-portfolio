@@ -66,7 +66,6 @@ export const copy = {
       description:
         'Full-stack разработчик: интерактивные WebGL-интерфейсы, ASP.NET/React-продукты и аккуратная инженерная архитектура.',
     },
-    loaderLabel: 'инициализация experience',
     nav: {
       about: 'Обо мне',
       projects: 'Проекты',
@@ -286,7 +285,6 @@ export const copy = {
       description:
         'Full-stack developer crafting interactive WebGL interfaces, ASP.NET/React products and clean engineering architecture.',
     },
-    loaderLabel: 'initializing experience',
     nav: {
       about: 'About',
       projects: 'Projects',

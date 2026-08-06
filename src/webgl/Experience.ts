@@ -198,7 +198,7 @@ export class Experience {
 
     const scene = this.scenes[name as SceneSection];
     if (!scene) return;
-    this.hint(false);
+    this.cancelHint(false);
     this.setDomHover(null);
     this.nodes.setSection(scene);
     this.clearHover();
@@ -213,6 +213,7 @@ export class Experience {
    */
   setDomHover(id: string | null): void {
     if (this.disposed) return;
+    if (id !== null) this.cancelHint(false);
     const nodes = this.nodes.activeNodes;
     let index = -1;
     if (id !== null) {
@@ -247,10 +248,7 @@ export class Experience {
     if (this.disposed || this.contextLost) return false;
 
     if (!active) {
-      if (this.hintIndex === -1) return false;
-      this.hintIndex = -1;
-      this.clearHover();
-      if (this.reducedMotion) this.renderOnce();
+      this.cancelHint();
       return false;
     }
 
@@ -412,8 +410,8 @@ export class Experience {
 
   private onPointerDown(event: PointerEvent): void {
     if (this.disposed || this.contextLost || event.button !== 0 || !event.isPrimary) return;
-    // a hint must never be mistaken for a hovered node when the press resolves
-    this.hintIndex = -1;
+    // A hint is a complete UI state, not just an index: cancel it atomically.
+    this.cancelHint();
     this.activePointerId = -1;
     this.pointerDragged = false;
     if (this.isBlockedTarget(event.target)) return;
@@ -527,6 +525,15 @@ export class Experience {
     this.onNodeHover?.(null);
   }
 
+  /** Cancel the complete idle-demo state before another interaction takes over. */
+  private cancelHint(renderStatic = true): boolean {
+    if (this.hintIndex === -1) return false;
+    this.hintIndex = -1;
+    this.clearHover();
+    if (renderStatic && this.reducedMotion) this.renderOnce();
+    return true;
+  }
+
   /** Screen-space picking: forgiving, bounded and independent of node size. */
   private updatePicking(): boolean {
     // a hovered card already owns the highlight; scene picking must not fight it
@@ -560,8 +567,8 @@ export class Experience {
       return previous !== -1;
     }
 
-    // a real hover always wins over the hint
-    this.hintIndex = -1;
+    // a real hover always wins over the hint and clears its DOM state first
+    this.cancelHint(false);
     this.hoverIndex = best;
     this.nodes.setHovered(best);
     this.onNodeHover?.({ node: nodes[best], index: best, x: this.hoverScreen.x, y: this.hoverScreen.y });

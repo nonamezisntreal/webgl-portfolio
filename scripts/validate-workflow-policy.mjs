@@ -176,7 +176,7 @@ keysExactly(build, ['runs-on', 'timeout-minutes', 'permissions', 'steps'], 'Buil
 assert(build['runs-on'] === 'ubuntu-24.04', 'Build runner must be pinned to ubuntu-24.04.');
 assert(build['timeout-minutes'] === 10, 'Build timeout must remain 10 minutes.');
 assertPermissions(build.permissions, { contents: 'read' }, 'Build job');
-assert(Array.isArray(build.steps) && build.steps.length === 7, `Build job must contain exactly 7 approved steps; found ${build.steps?.length ?? '<invalid>'}.`);
+assert(Array.isArray(build.steps) && build.steps.length === 8, `Build job must contain exactly 8 approved steps; found ${build.steps?.length ?? '<invalid>'}.`);
 
 assertActionStep(build.steps[0], 'Checkout exact subject', 'actions/checkout', 'Checkout exact subject', {
   with: {
@@ -194,7 +194,9 @@ assertRunStep(build.steps[3], 'bun run build', 'Build and validate', {
   BASE_PATH: '/${{ github.event.repository.name }}/',
 });
 assert(build.steps[3].name === 'Build and validate', 'Build validation step name changed.');
-assertActionStep(build.steps[4], 'Upload review artifact', 'actions/upload-artifact', 'Upload review artifact', {
+assertRunStep(build.steps[4], 'bun run test:browser', 'Browser regression');
+assert(build.steps[4].name === 'Browser regression', 'Browser regression step name changed.');
+assertActionStep(build.steps[5], 'Upload review artifact', 'actions/upload-artifact', 'Upload review artifact', {
   if: "github.event_name == 'pull_request'",
   with: {
     name: 'portfolio-dist-${{ github.event.pull_request.head.sha }}',
@@ -203,8 +205,8 @@ assertActionStep(build.steps[4], 'Upload review artifact', 'actions/upload-artif
     'retention-days': 7,
   },
 });
-assertActionStep(build.steps[5], 'Configure GitHub Pages', 'actions/configure-pages', 'Configure GitHub Pages', { if: deployCondition });
-assertActionStep(build.steps[6], 'Upload GitHub Pages artifact', 'actions/upload-pages-artifact', 'Upload GitHub Pages artifact', {
+assertActionStep(build.steps[6], 'Configure GitHub Pages', 'actions/configure-pages', 'Configure GitHub Pages', { if: deployCondition });
+assertActionStep(build.steps[7], 'Upload GitHub Pages artifact', 'actions/upload-pages-artifact', 'Upload GitHub Pages artifact', {
   if: deployCondition,
   with: { path: 'dist' },
 });

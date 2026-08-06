@@ -18,6 +18,7 @@ assert(/<html\b[^>]*\bdata-locale="ru"/u.test(indexHtml), 'Canonical homepage so
 assert(/<span\b[^>]*\bdata-lang-pill="ru"[^>]*\baria-current="page"/u.test(indexHtml), 'Canonical RU locale must be an inert span.');
 assert(/<a\b[^>]*\bdata-lang-pill="en"[^>]*\bdata-lang-link\b[^>]*\bhreflang="en"/u.test(indexHtml), 'Canonical EN counterpart must be a physical anchor.');
 assert(!/<a\b[^>]*\bdata-lang-pill="ru"[^>]*\baria-current="page"/u.test(indexHtml), 'Canonical active RU locale must not be an anchor.');
+assert(!/\bid="loader"\b/u.test(indexHtml) && !/loader__/u.test(indexHtml), 'Canonical homepage must not block content behind a synthetic loader.');
 
 assert(/function localeFromDocument\(\): Locale/u.test(main), 'Runtime locale must be read from the physical document contract.');
 assert(/document\.documentElement\.dataset\.locale/u.test(main), 'Runtime locale source of truth is missing.');
@@ -25,6 +26,9 @@ assert(/routeLocale !== declared/u.test(main), 'Runtime must fail closed when pa
 assert(!/const locale\s*:\s*Locale\s*=\s*['"]ru['"]/u.test(main), 'Runtime locale is hardcoded to RU.');
 assert(!/\blocalStorage\b/u.test(main), 'Canonical locale must not depend on localStorage.');
 assert(!/location\.(?:replace|assign)\s*\(/u.test(main), 'Canonical locale must not depend on a JavaScript redirect.');
+assert(/document\.body\.classList\.add\('is-ready'\)/u.test(main), 'Homepage content must become ready without waiting for WebGL or a synthetic loader.');
+assert(!/fakeProgress|hideLoader|Math\.random\(\)/u.test(main), 'Homepage runtime reintroduced synthetic loading progress.');
+assert(/intro\.bindIgnite\(\(\) => experience\.ignite\(\)\)/u.test(main), 'The WebGL ignition must bind through the interruptible intro contract.');
 
 assert(!/function\s+homeDocument\s*\(/u.test(generator), 'Obsolete static homeDocument() source of truth is active.');
 assert(!/writePage\(\s*homePath\s*,/u.test(generator), 'Generator still writes a route-loop static homepage.');
@@ -33,11 +37,13 @@ assert(/interactiveHomeDocument\(interactiveBaseHtml,\s*['"]en['"]\)/u.test(gene
 assert(/data-homepage-assembly=\\?"v1\\?"/u.test(generator), 'Generator homepage assembly marker is missing.');
 assert(/data-interactive-homepage=\\?"v1\\?"/u.test(generator), 'Generator interactive homepage marker is missing.');
 assert(/languageSwitcher\(locale\)/u.test(generator), 'Generator does not localize the semantic language switcher.');
+assert(!/loader-label/u.test(generator), 'Generated localized homepages must not depend on loader markup.');
 
 assert(/resolve\(process\.cwd\(\),\s*['"]dist['"],\s*['"]index\.html['"]\)/u.test(hardener), 'Homepage hardener does not include dist/index.html.');
 assert(/resolve\(process\.cwd\(\),\s*['"]dist['"],\s*['"]en['"],\s*['"]index\.html['"]\)/u.test(hardener), 'Homepage hardener does not include dist/en/index.html.');
 assert(/prepared\.length/u.test(hardener) && /Promise\.all\(prepared/u.test(hardener), 'Homepage hardening must prepare both localized pages before writes.');
 assert(/homepage hardening was applied more than once/u.test(hardener), 'Homepage hardening repeated-execution guard is missing.');
+assert(!/\.loader/u.test(hardener), 'Homepage hardening must not restore loader chrome.');
 
 assert(/manifest\.routes\.filter\(\(route\) => route\.type !== ['"]home['"]\)\.length/u.test(finalizer), 'Static navigation count must be derived from the routes manifest.');
 assert(/route\.locale === ['"]ru['"]/u.test(finalizer) && /route\.locale === ['"]en['"]/u.test(finalizer), 'Static navigation finalizer must bind both homepage locales.');

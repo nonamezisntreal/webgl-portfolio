@@ -1,8 +1,7 @@
 /**
  * Stage beats, in ms from the moment the runtime is ready — not from
- * navigation. The bundle needs its own time to arrive, and the hero is
- * invisible until it does, so beats measured from navigation would hold an
- * already-late page back even further.
+ * navigation. The bundle needs its own time to arrive, so every beat remains
+ * interruptible and the final state is always the ordinary usable page.
  */
 const IGNITION_AT = 0;
 const TITLE_AT = 120;
@@ -20,29 +19,27 @@ const SKIP_EVENTS = ['pointerdown', 'wheel', 'keydown', 'touchstart'] as const;
 
 export interface IntroOptions {
   reducedMotion: boolean;
-  /** Fire the scene's activation pulse, if a scene is running at all. */
-  onIgnite: () => void;
 }
 
 export interface Intro {
   /** End the activation now, leaving the page in its ordinary state. */
   skip(): void;
+  /**
+   * Attach the WebGL ignition when the scene is ready. If the ignition beat
+   * already arrived, it is delivered once — unless the visitor already skipped.
+   */
+  bindIgnite(callback: () => void): void;
+  /** Release timers and global listeners during page teardown. */
+  dispose(): void;
   /** Whether the visitor has already acted, including before this bundle ran. */
   readonly engaged: boolean;
 }
 
-/**
- * The platform keeps its own sticky record of user gestures, which is the only
- * way to know about presses that landed while the bundle was still loading.
- * Not every engine exposes it, hence the guard: our own listener is the
- * portable path, and it only misses the window before this module ran.
- */
 function hasBeenActive(): boolean {
   const activation: UserActivation | undefined = navigator.userActivation;
   return activation?.hasBeenActive ?? false;
 }
 
-/** Storage is unreachable in some privacy modes; a missed flag only costs one replay. */
 function seenThisSession(): boolean {
   try {
     return sessionStorage.getItem(SESSION_KEY) === '1';
@@ -65,39 +62,64 @@ function rememberSession(): void {
  * ends it at once. The finished state is the page with no intro markers on it,
  * so ending early and ending on time land in exactly the same place.
  */
-export function initIntro({ reducedMotion, onIgnite }: IntroOptions): Intro {
+export function initIntro({ reducedMotion }: IntroOptions): Intro {
   const root = document.documentElement;
   const timers: number[] = [];
   let finished = false;
+  let disposed = false;
   let acted = false;
+  let ignitionPending = false;
+  let ignitionFired = false;
+  let ignite: (() => void) | null = null;
+
+  const removeEngagementListeners = (): void => {
+    for (const type of SKIP_EVENTS) window.removeEventListener(type, markActed);
+  };
 
   const finish = (): void => {
     if (finished) return;
     finished = true;
+    ignitionPending = false;
     for (const timer of timers) window.clearTimeout(timer);
     timers.length = 0;
     root.classList.remove('is-intro-title', 'is-intro-interface');
     delete root.dataset.intro;
   };
 
-  /* This outlives the activation: the rest of the page needs to know whether
-     the visitor ever acted, not only whether they cut the intro short. */
-  const markActed = (): void => {
+  const fireIgnition = (): void => {
+    if (finished || ignitionFired || !ignitionPending || !ignite) return;
+    ignitionFired = true;
+    ignitionPending = false;
+    ignite();
+  };
+
+  function markActed(): void {
     if (acted) return;
     acted = true;
-    for (const type of SKIP_EVENTS) window.removeEventListener(type, markActed);
+    removeEngagementListeners();
     finish();
-  };
+  }
   for (const type of SKIP_EVENTS) window.addEventListener(type, markActed, { passive: true });
 
   const intro: Intro = {
     skip: finish,
+    bindIgnite(callback) {
+      if (disposed) return;
+      ignite = callback;
+      fireIgnition();
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      finish();
+      removeEngagementListeners();
+      ignite = null;
+    },
     get engaged() {
       return acted || hasBeenActive();
     },
   };
 
-  // a visitor who already pressed something is not waiting to be introduced
   if (reducedMotion || hasBeenActive()) {
     rememberSession();
     return intro;
@@ -111,7 +133,11 @@ export function initIntro({ reducedMotion, onIgnite }: IntroOptions): Intro {
     timers.push(window.setTimeout(step, ms * scale));
   };
 
-  at(IGNITION_AT, onIgnite);
+  at(IGNITION_AT, () => {
+    if (finished) return;
+    ignitionPending = true;
+    fireIgnition();
+  });
   at(TITLE_AT, () => root.classList.add('is-intro-title'));
   at(INTERFACE_AT, () => root.classList.add('is-intro-interface'));
   at(CALM_AT, finish);

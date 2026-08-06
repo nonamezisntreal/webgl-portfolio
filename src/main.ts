@@ -66,7 +66,6 @@ function applyLocale(currentLocale: Locale): void {
   document.getElementById('case-close')?.setAttribute('aria-label', currentLocale === 'ru' ? 'Закрыть описание проекта' : 'Close project details');
 
   setText('skip-link', currentLocale === 'ru' ? 'Перейти к основному содержимому' : 'Skip to main content');
-  setText('loader-label', t.loaderLabel);
   setText('nav-about', t.nav.about);
   setText('nav-projects', t.nav.projects);
   setText('nav-skills', t.nav.skills);
@@ -123,11 +122,11 @@ function applyLocale(currentLocale: Locale): void {
 
 /* Locale is declared by the physical HTML artifact and verified against its canonical route. */
 applyLocale(locale);
+document.body.classList.add('is-ready');
 
-/* The activation is choreography over an already usable page, so it starts
-   before the scene and ignites it only if one came up in time. */
-let ignite = (): void => {};
-const intro = initIntro({ reducedMotion, onIgnite: () => ignite() });
+/* The activation is choreography over an already usable page. Its WebGL beat
+   is bound later and delivered only while the intro is still active. */
+const intro = initIntro({ reducedMotion });
 
 /* UI layer works even if WebGL fails. */
 initReveals(reducedMotion);
@@ -157,7 +156,7 @@ async function boot(): Promise<void> {
       onNodeHover: (pointer) => nav?.hover(pointer),
       onNodeSelect: (pointer) => nav?.select(pointer),
     });
-    ignite = () => experience.ignite();
+    intro.bindIgnite(() => experience.ignite());
     try {
       nav = initSceneNav({
         reducedMotion,
@@ -194,31 +193,11 @@ async function boot(): Promise<void> {
     document.documentElement.classList.add('webgl-fallback');
     canvas.remove();
     initScroll(reducedMotion, { onProgress: () => {}, onSection: () => {} });
-  } finally {
-    hideLoader();
   }
 }
 
-const loader = document.getElementById('loader');
-const counter = document.getElementById('loader-count');
-let progress = 0;
-const fakeProgress = setInterval(() => {
-  progress = Math.min(progress + Math.random() * 14, 92);
-  if (counter) counter.textContent = String(Math.floor(progress));
-}, 90);
-
-function hideLoader(): void {
-  clearInterval(fakeProgress);
-  if (counter) counter.textContent = '100';
-  setTimeout(() => {
-    loader?.classList.add('loader--done');
-    document.body.classList.add('is-ready');
-    setTimeout(() => loader?.remove(), 900);
-  }, 250);
-}
-
 window.addEventListener('pagehide', () => {
-  intro.skip();
+  intro.dispose();
   disposeExperience?.();
 }, { once: true });
 boot();

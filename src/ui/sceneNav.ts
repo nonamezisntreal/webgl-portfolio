@@ -10,6 +10,8 @@ const DEMO_HOLD_MS = 1300;
 const PULSE_MS = 700;
 /** Where the smooth scroll parks the target: see scrollToElement. */
 const SCROLL_OFFSET = 90;
+/** A real action cancels an active or scheduled idle demonstration. */
+const ACTIVITY_EVENTS = ['pointermove', 'pointerdown', 'wheel', 'keydown', 'touchstart'] as const;
 
 export interface SceneGuideCopy {
   title: string;
@@ -51,11 +53,18 @@ interface SceneTargets {
 
 function assertSceneTargets(scenes: Record<SceneSection, SectionScene>): SceneTargets {
   const usedTargets = new Map<string, string>();
+  const usedIds = new Map<string, string>();
   const byElement = new Map<Element, string>();
   const byId = new Map<string, HTMLElement>();
 
   for (const scene of Object.values(scenes)) {
     for (const node of scene.nodes) {
+      const previousTarget = usedIds.get(node.id);
+      if (previousTarget) {
+        throw new Error(`Scene node id '${node.id}' is shared by '${previousTarget}' and '${node.target}'.`);
+      }
+      usedIds.set(node.id, node.target);
+
       const previousNode = usedTargets.get(node.target);
       if (previousNode) {
         throw new Error(`Scene target '${node.target}' is shared by '${previousNode}' and '${node.id}'.`);
@@ -148,6 +157,12 @@ export function initSceneNav({
     element?.classList.add('is-scene-linked');
   };
 
+  const clearDomHover = (): void => {
+    if (linkedId === null) return;
+    linkedId = null;
+    onDomHover(null);
+  };
+
   const resetGuide = (): void => {
     guide.classList.remove('scene-guide--active', 'scene-guide--selected');
     guideAction.textContent = guideCopy.action;
@@ -191,7 +206,13 @@ export function initSceneNav({
     linkedId = id;
     onDomHover(id);
   };
+  const handlePointerOut = (event: PointerEvent): void => {
+    if (event.relatedTarget === null) clearDomHover();
+  };
+  const handleWindowBlur = (): void => clearDomHover();
   document.addEventListener('pointerover', handlePointerOver, { passive: true });
+  document.addEventListener('pointerout', handlePointerOut, { passive: true });
+  window.addEventListener('blur', handleWindowBlur);
 
   /**
    * Send a visible signal from the node to what it selected, so the scroll
@@ -224,9 +245,24 @@ export function initSceneNav({
    */
   let demoTimer = 0;
   let demoHold = 0;
+  let locallyEngaged = false;
+
+  const stopDemo = (): void => {
+    window.clearTimeout(demoTimer);
+    window.clearTimeout(demoHold);
+    onHint(false);
+  };
+
+  const handleActivity = (): void => {
+    if (locallyEngaged) return;
+    locallyEngaged = true;
+    stopDemo();
+    for (const type of ACTIVITY_EVENTS) window.removeEventListener(type, handleActivity);
+  };
+  for (const type of ACTIVITY_EVENTS) window.addEventListener(type, handleActivity, { passive: true });
 
   demoTimer = window.setTimeout(() => {
-    if (disposed || hasEngaged() || activeSection !== 'hero') return;
+    if (disposed || locallyEngaged || hasEngaged() || activeSection !== 'hero') return;
     if (!onHint(true)) return;
     demoHold = window.setTimeout(() => onHint(false), DEMO_HOLD_MS);
   }, DEMO_DELAY_MS);
@@ -299,8 +335,10 @@ export function initSceneNav({
     setSection(name) {
       if (disposed) return;
       activeSection = name;
+      clearDomHover();
+      setLinked(null);
       guide.classList.toggle('scene-guide--hidden', name !== 'hero');
-      tip.classList.remove('scene-tip--visible');
+      tip.classList.remove('scene-tip--visible', 'scene-tip--hint');
       cursor?.classList.remove('cursor--node');
       if (name === 'hero') resetGuide();
     },
@@ -310,8 +348,12 @@ export function initSceneNav({
       disposed = true;
       document.removeEventListener('keydown', handleKeydown);
       document.removeEventListener('pointerover', handlePointerOver);
+      document.removeEventListener('pointerout', handlePointerOut);
+      window.removeEventListener('blur', handleWindowBlur);
+      for (const type of ACTIVITY_EVENTS) window.removeEventListener(type, handleActivity);
       window.clearTimeout(demoTimer);
       window.clearTimeout(demoHold);
+      clearDomHover();
       clearHighlight();
       hide();
       tip.remove();

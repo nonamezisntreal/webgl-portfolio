@@ -112,6 +112,10 @@ assert(/setAtmosphere\(color: THREE\.Color \| null, immediate = false\): void/u.
 assert(/addEventListener\('pointerover'/u.test(sceneNav) && /removeEventListener\('pointerover'/u.test(sceneNav), 'The DOM→scene bridge must be registered and cleaned up.');
 assert(/is-scene-linked/u.test(sceneNav), 'Scene hover must mark the card its node points at.');
 assert(/resolve to the same element/u.test(sceneNav), 'Two scene nodes must never claim one DOM element.');
+assert(/usedIds/u.test(sceneNav) && /Scene node id/u.test(sceneNav), 'Scene node IDs must be globally unique and fail closed.');
+assert(/addEventListener\('pointerout'/u.test(sceneNav) && /removeEventListener\('pointerout'/u.test(sceneNav)
+  && /addEventListener\('blur'/u.test(sceneNav) && /removeEventListener\('blur'/u.test(sceneNav),
+  'DOM hover must clear when the pointer leaves the document or the window loses focus.');
 
 /* ── Idle demonstration and the signal a selection sends ── */
 
@@ -119,9 +123,13 @@ assert(/hint\(active: boolean\): boolean/u.test(experience), 'The scene must be 
 assert(/hint: true/u.test(experience), 'The DOM bridge must be able to tell a hint from a real hover.');
 assert(/if \(this\.hintIndex >= 0\) return false;/u.test(experience), 'An idle hint must survive the frames where picking finds nothing.');
 const pointerDownBody = /private onPointerDown\([\s\S]*?\n {2}\}/u.exec(experience)?.[0] ?? '';
-assert(/this\.hintIndex = -1;/u.test(pointerDownBody), 'A press must never resolve an idle hint into a selection.');
+assert(/this\.cancelHint\(\)/u.test(pointerDownBody), 'A press must cancel the complete idle-hint state before activation arbitration.');
+assert(/setDomHover\(id: string \| null\): void[\s\S]*?if \(id !== null\) this\.cancelHint\(false\)/u.test(experience),
+  'A real DOM hover must atomically replace an active idle hint.');
 
 assert(/DEMO_DELAY_MS/u.test(sceneNav) && /DEMO_HOLD_MS/u.test(sceneNav), 'The idle demonstration lost its timing contract.');
+assert(/ACTIVITY_EVENTS = \['pointermove'/u.test(sceneNav), 'Pointer exploration must cancel the idle demonstration before it interferes with picking.');
+assert(/const stopDemo/u.test(sceneNav) && /onHint\(false\)/u.test(sceneNav), 'Idle-demo cancellation must clear the full scene hint state.');
 assert(/hasEngaged\(\)/u.test(sceneNav), 'The demonstration must stand down once the visitor acts on their own.');
 assert(/window\.clearTimeout\(demoTimer\)/u.test(sceneNav), 'The demonstration must not outlive the scene it belongs to.');
 assert(/if \(!pointer\.hint\) cursor/u.test(sceneNav), 'A hint must not pretend the cursor is on the node.');
@@ -143,9 +151,15 @@ assert(/navigator\.userActivation/u.test(intro) && /activation\?\.hasBeenActive/
   'A gesture that landed before this bundle ran still counts as the visitor having acted.');
 assert(/delete root\.dataset\.intro/u.test(intro), 'A finished activation must leave the page carrying no intro state.');
 assert(/sessionStorage/u.test(intro) && /REPEAT_SCALE/u.test(intro), 'A repeat visit in the same session must not sit through the full activation.');
+assert(/bindIgnite\(callback/u.test(intro) && /ignitionPending/u.test(intro) && /fireIgnition\(\)/u.test(intro),
+  'A scene that binds after the ignition beat must receive it once unless the intro was skipped.');
+assert(/dispose\(\)/u.test(intro) && /removeEngagementListeners\(\)/u.test(intro),
+  'Intro teardown must release global listeners and pending timers.');
 
 assert(!/scene-guide/u.test(indexHtml) && !/scene-pulse/u.test(indexHtml) && !/data-intro/u.test(indexHtml),
   'Scene onboarding and activation state must be applied at runtime without changing static index markup.');
+assert(!/\bid="loader"\b/u.test(indexHtml) && !/loader__/u.test(indexHtml),
+  'The homepage must not block its already-usable content behind synthetic loader markup.');
 assert(/<canvas id="gl" aria-hidden="true">/u.test(indexHtml), 'The scene must remain a shortcut: the canvas stays out of the accessibility tree.');
 
 console.log('Validated hero scene contract: intrusive spherical comets absent; core, shader particles, rings, shards and bloom preserved; interactive node layer, picking, shockwave, DOM navigation bridge and two-way hover link intact.');

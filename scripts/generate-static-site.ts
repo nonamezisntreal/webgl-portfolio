@@ -277,7 +277,6 @@ function localizeInteractiveHomepage(source: string, locale: Locale): string {
   html = html.replace('<body>', '<body data-page-type="home" data-page-id="home" data-interactive-homepage="v1">');
 
   html = replaceElementContent(html, 'skip-link', locale === 'ru' ? 'Перейти к основному содержимому' : 'Skip to main content');
-  html = replaceElementContent(html, 'loader-label', escapeHtml(t.loaderLabel));
   html = replaceElementContent(html, 'nav-about', escapeHtml(t.nav.about));
   html = replaceElementContent(html, 'nav-projects', escapeHtml(t.nav.projects));
   html = replaceElementContent(html, 'nav-skills', escapeHtml(t.nav.skills));
