@@ -49,8 +49,12 @@ Object.assign(postFx as unknown as Record<string, unknown>, {
   baseBloom: 1,
   bloomScale: 1,
   flashValue: 1,
+  atmosphere: new THREE.Color('#ffffff'),
+  atmosphereWeight: 0,
+  tint: new THREE.Color('#ffffff'),
+  tintAmount: 0,
   bloom: { strength: 1 },
-  grade: { uniforms: { uTime: { value: 0 } } },
+  grade: { uniforms: { uTime: { value: 0 }, uTintAmount: { value: 0 } } },
   composer: { render() {} },
 });
 postFx.render(100, 0.05);
@@ -76,6 +80,23 @@ assert(firstPositions.some((position) => position.length() > 1), 'Immediate node
 nodes.update(9.5, 0, true);
 const secondPositions = sceneNodes.map((_, index) => nodes.worldPosition(index, new THREE.Vector3()).clone());
 assert(firstPositions.every((position, index) => position.distanceTo(secondPositions[index]) < 1e-9), 'Reduced-motion node positions still drift between static renders.');
+
+const reach = new Nodes(colorA, colorB, sceneNodes.length);
+reach.setSection(scene);
+reach.update(2.5, 0, true);
+const restPosition = reach.worldPosition(0, new THREE.Vector3()).clone();
+reach.setHovered(0);
+reach.setPull(new THREE.Vector3(50, 50, 50));
+reach.update(2.5, 0, true);
+assert(
+  restPosition.distanceTo(reach.worldPosition(0, new THREE.Vector3())) < 1e-9,
+  'Static render applied the pointer reach instead of ignoring it.',
+);
+for (let frame = 0; frame < 60; frame++) reach.update(2.5, 0);
+assert(
+  reach.worldPosition(0, new THREE.Vector3()).distanceTo(restPosition) < 0.4,
+  'Pointer reach accumulated past its bound instead of staying a fixed offset.',
+);
 
 const undersized = new Nodes(colorA, colorB, 1);
 let overflowRejected = false;

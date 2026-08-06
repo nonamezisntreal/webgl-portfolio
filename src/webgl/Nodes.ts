@@ -17,6 +17,12 @@ interface NodeState {
 }
 
 const GOLDEN_ANGLE = Math.PI * (1 + Math.sqrt(5));
+/** How far, in world units, a hovered node may reach toward the pointer. */
+const PULL_REACH = 0.26;
+
+const inverseWorld = new THREE.Matrix4();
+const localPull = new THREE.Vector3();
+const pullOffset = new THREE.Vector3();
 
 /** Resolve the resting position of one node inside a formation. */
 function layout(formation: Formation, index: number, count: number, weight: number, out: THREE.Vector3): void {
@@ -86,7 +92,12 @@ export class Nodes {
   private readonly gradient: THREE.Color[] = [];
   private visible: SceneNode[] = [];
   private selected = -1;
+  private hovered = -1;
   private spread = 1;
+  /** 0..1 — how strongly the constellation is focused on a single node. */
+  private attention = 0;
+  private readonly pull = new THREE.Vector3();
+  private pulling = false;
 
   constructor(colorA: THREE.Color, colorB: THREE.Color, capacity: number) {
     this.mesh = new THREE.InstancedMesh(
@@ -136,6 +147,7 @@ export class Nodes {
     }
     this.visible = [...scene.nodes];
     this.selected = -1;
+    this.hovered = -1;
 
     for (let i = 0; i < this.states.length; i++) {
       const state = this.states[i];
@@ -161,7 +173,14 @@ export class Nodes {
   }
 
   setHovered(index: number): void {
+    this.hovered = index;
     for (let i = 0; i < this.states.length; i++) this.states[i].targetHover = i === index ? 1 : 0;
+  }
+
+  /** World point the hovered node reaches toward, or null to let it rest. */
+  setPull(point: THREE.Vector3 | null): void {
+    this.pulling = point !== null;
+    if (point) this.pull.copy(point);
   }
 
   setSelected(index: number): void {
@@ -176,6 +195,18 @@ export class Nodes {
   update(time: number, scroll: number, immediate = false): void {
     // content sections must stay readable, so the layer calms down as the page scrolls
     const fade = 1 - scroll * 0.35;
+
+    // one node under attention pushes the rest of the constellation into the background
+    const attentionTarget = this.hovered >= 0 ? 1 : 0;
+    this.attention = immediate ? attentionTarget : this.attention + (attentionTarget - this.attention) * 0.12;
+    const ambient = 1 - this.attention * 0.42;
+
+    // the reach is a per-frame offset, so it has no meaning in a single static render
+    const reaching = this.pulling && !immediate;
+    if (reaching) {
+      inverseWorld.copy(this.group.matrixWorld).invert();
+      localPull.copy(this.pull).applyMatrix4(inverseWorld);
+    }
 
     for (let i = 0; i < this.states.length; i++) {
       const state = this.states[i];
@@ -201,6 +232,12 @@ export class Nodes {
         state.current.y + (immediate ? 0 : Math.sin(time * 0.6 + state.phase) * 0.07),
         state.current.z * this.spread,
       );
+      // hover phase 1: the node leans toward the pointer, and its hitbox with it
+      if (reaching && state.hover > 0.001) {
+        pullOffset.subVectors(localPull, state.rendered).clampLength(0, PULL_REACH);
+        state.rendered.addScaledVector(pullOffset, state.hover);
+      }
+
       this.dummy.position.copy(state.rendered);
       if (immediate) this.dummy.rotation.set(0, 0, 0);
       else this.dummy.rotation.set(time * state.spin, time * state.spin * 0.7, 0);
@@ -209,7 +246,7 @@ export class Nodes {
       this.mesh.setMatrixAt(i, this.dummy.matrix);
 
       // idle nodes stay subdued so hover reads as a real affordance
-      const glow = 0.75 + state.hover * 1.65 + selectedPulse * 2;
+      const glow = 0.75 * ambient + state.hover * 1.75 + selectedPulse * 2;
       state.color.copy(state.restColor).multiplyScalar(glow);
       this.mesh.setColorAt(i, state.color);
     }

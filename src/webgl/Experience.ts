@@ -78,12 +78,16 @@ export class Experience {
   private readonly cameraBase = new THREE.Vector3();
   private readonly lookTarget = new THREE.Vector3();
   private readonly pointerDownClient = new THREE.Vector2();
+  private readonly pullScratch = new THREE.Vector3();
+  private readonly pullPoint = new THREE.Vector3();
+  private readonly atmosphereColor = new THREE.Color();
   private pointerSeen = false;
   private pointerSpeed = 0;
   private lastPointerTime = 0;
   private activePointerId = -1;
   private pointerDragged = false;
   private hoverIndex = -1;
+  private domHoverIndex = -1;
   private focusIndex = -1;
   private focusHold = 0;
   private focusWeight = 0;
@@ -191,9 +195,42 @@ export class Experience {
 
     const scene = this.scenes[name as SceneSection];
     if (!scene) return;
+    this.setDomHover(null);
     this.nodes.setSection(scene);
     this.clearHover();
     this.releaseFocus();
+    if (this.reducedMotion) this.renderOnce();
+  }
+
+  /**
+   * Light up the node that stands for a DOM element the pointer rests on, so
+   * the page and the scene read as one interface. The card is its own label,
+   * so this direction never opens the scene tooltip.
+   */
+  setDomHover(id: string | null): void {
+    if (this.disposed) return;
+    const nodes = this.nodes.activeNodes;
+    let index = -1;
+    if (id !== null) {
+      for (let i = 0; i < nodes.length; i++) {
+        if (nodes[i].id === id) {
+          index = i;
+          break;
+        }
+      }
+    }
+    if (index === this.domHoverIndex) return;
+
+    this.clearHover();
+    this.domHoverIndex = index;
+    this.nodes.setPull(null);
+    if (index >= 0) {
+      this.hoverIndex = index;
+      this.nodes.setHovered(index);
+    }
+
+    const accent = index >= 0 ? nodes[index].color : undefined;
+    this.postfx.setAtmosphere(accent ? this.atmosphereColor.set(accent) : null, this.reducedMotion);
     if (this.reducedMotion) this.renderOnce();
   }
 
@@ -332,6 +369,9 @@ export class Experience {
     this.activePointerId = -1;
     this.pointerDragged = false;
 
+    // the pointer is resting on a card: that DOM element owns the gesture
+    if (this.domHoverIndex >= 0) return;
+
     if (dragged || this.isBlockedTarget(event.target) || this.isBlockedPoint()) {
       const hoverChanged = this.hoverIndex !== -1;
       this.clearHover();
@@ -422,6 +462,8 @@ export class Experience {
 
   /** Screen-space picking: forgiving, bounded and independent of node size. */
   private updatePicking(): boolean {
+    // a hovered card already owns the highlight; scene picking must not fight it
+    if (this.domHoverIndex >= 0) return false;
     const previous = this.hoverIndex;
     const nodes = this.nodes.activeNodes;
     if (!this.pointerSeen || nodes.length === 0 || this.isBlockedPoint()) {
@@ -538,6 +580,17 @@ export class Experience {
 
     this.camera.position.copy(this.cameraBase);
     this.camera.lookAt(this.lookTarget);
+
+    // the hovered node reaches toward the pointer, sampled at its own depth
+    if (this.hoverIndex >= 0 && this.domHoverIndex < 0) {
+      this.nodes.worldPosition(this.hoverIndex, this.worldScratch);
+      this.pullScratch.set(this.mouse.x, this.mouse.y, 0.5).unproject(this.camera).sub(this.camera.position).normalize();
+      this.pullPoint.copy(this.camera.position)
+        .addScaledVector(this.pullScratch, this.worldScratch.distanceTo(this.camera.position));
+      this.nodes.setPull(this.pullPoint);
+    } else {
+      this.nodes.setPull(null);
+    }
 
     this.postfx.setBloomScale(1 - this.scroll * 0.45);
     this.core.update(time, delta, this.smoothMouse, this.scroll);

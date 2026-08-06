@@ -97,7 +97,22 @@ assert(/guide\.className = 'scene-guide'/u.test(sceneNav) && /tip\.dataset\.acti
 assert(/setSection\(name: string\): void/u.test(sceneNav) && /scene-guide--hidden/u.test(sceneNav), 'Scene onboarding must only remain visible in the hero section.');
 assert(/dispose\(\)/u.test(sceneNav) && /removeEventListener\('keydown'/u.test(sceneNav) && /guide\.remove\(\)/u.test(sceneNav), 'Scene navigation must clean up its global listener, tooltip and onboarding guide.');
 assert(/setAttribute\('aria-hidden', 'true'\)/u.test(sceneNav), 'Scene node label must stay hidden from assistive technology.');
+/* ── Two-way link: the page and the scene must read as one interface ── */
+
+assert(/setPull\(point: THREE\.Vector3 \| null\): void/u.test(nodes), 'A hovered node must be able to reach toward the pointer.');
+assert(/this\.attention/u.test(nodes), 'Nodes must recede while one of them holds attention.');
+assert(/const reaching = this\.pulling && !immediate/u.test(nodes), 'The pointer reach is a per-frame offset and must stay out of the static render.');
+assert(/setDomHover\(id: string \| null\): void/u.test(experience), 'Hovering a card must light up the node that stands for it.');
+assert(/if \(this\.domHoverIndex >= 0\) return false;/u.test(experience), 'Scene picking must yield to the card under the pointer.');
+assert(/if \(this\.domHoverIndex >= 0\) return;/u.test(experience), 'A hovered card must own its own activation gesture.');
+assert(/this\.postfx\.setAtmosphere\(/u.test(experience), 'Project hover must reach the grade pass.');
+assert(/setAtmosphere\(color: THREE\.Color \| null, immediate = false\): void/u.test(postFx)
+  && /uTint/u.test(postFx), 'Project atmosphere must ease in the loop and snap under reduced motion.');
+assert(/addEventListener\('pointerover'/u.test(sceneNav) && /removeEventListener\('pointerover'/u.test(sceneNav), 'The DOM→scene bridge must be registered and cleaned up.');
+assert(/is-scene-linked/u.test(sceneNav), 'Scene hover must mark the card its node points at.');
+assert(/resolve to the same element/u.test(sceneNav), 'Two scene nodes must never claim one DOM element.');
+
 assert(!/scene-guide/u.test(indexHtml), 'Scene onboarding must be created at runtime without changing static index markup.');
 assert(/<canvas id="gl" aria-hidden="true">/u.test(indexHtml), 'The scene must remain a shortcut: the canvas stays out of the accessibility tree.');
 
-console.log('Validated hero scene contract: intrusive spherical comets absent; core, shader particles, rings, shards and bloom preserved; interactive node layer, picking, shockwave and DOM navigation bridge intact.');
+console.log('Validated hero scene contract: intrusive spherical comets absent; core, shader particles, rings, shards and bloom preserved; interactive node layer, picking, shockwave, DOM navigation bridge and two-way hover link intact.');

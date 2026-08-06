@@ -16,6 +16,11 @@ export class PostFX {
   private baseBloom: number;
   private bloomScale = 1;
   private flashValue = 0;
+  /** Target project accent and its weight; the live pair below eases toward them. */
+  private readonly atmosphere = new THREE.Color('#ffffff');
+  private atmosphereWeight = 0;
+  private readonly tint = new THREE.Color('#ffffff');
+  private tintAmount = 0;
 
   constructor(
     renderer: THREE.WebGLRenderer,
@@ -41,6 +46,8 @@ export class PostFX {
         uTime: { value: 0 },
         uAberration: { value: quality === 'high' ? 0.012 : 0.0 },
         uVignette: { value: 1.15 },
+        uTint: { value: this.tint },
+        uTintAmount: { value: 0 },
       },
       vertexShader: gradeVertex,
       fragmentShader: gradeFragment,
@@ -58,6 +65,19 @@ export class PostFX {
     this.flashValue = Math.min(1, strength);
   }
 
+  /**
+   * Take on the accent of the project under the pointer, or return to the
+   * neutral grade. Reduced motion snaps: it renders no continuous frames.
+   */
+  setAtmosphere(color: THREE.Color | null, immediate = false): void {
+    if (color) this.atmosphere.copy(color);
+    this.atmosphereWeight = color ? 0.5 : 0;
+    if (!immediate) return;
+    this.tint.copy(this.atmosphere);
+    this.tintAmount = this.atmosphereWeight;
+    this.grade.uniforms.uTintAmount.value = this.tintAmount;
+  }
+
   setSize(width: number, height: number, pixelRatio: number): void {
     this.composer.setSize(width, height);
     this.composer.setPixelRatio(pixelRatio);
@@ -66,8 +86,12 @@ export class PostFX {
   render(time: number, delta: number): void {
     this.flashValue *= Math.exp(-delta * 3.2);
 
+    this.tint.lerp(this.atmosphere, 0.09);
+    this.tintAmount += (this.atmosphereWeight - this.tintAmount) * 0.09;
+
     this.bloom.strength = this.baseBloom * this.bloomScale * (1 + this.flashValue * 1.6);
     this.grade.uniforms.uTime.value = time;
+    this.grade.uniforms.uTintAmount.value = this.tintAmount;
     this.composer.render();
   }
 

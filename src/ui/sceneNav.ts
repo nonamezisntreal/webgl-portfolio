@@ -21,8 +21,18 @@ export interface SceneNav {
   dispose(): void;
 }
 
-function assertSceneTargets(scenes: Record<SceneSection, SectionScene>): void {
+interface SceneTargets {
+  /** Element the pointer may enter → the node that stands for it. */
+  byElement: Map<Element, string>;
+  /** Node id → the element it points at. */
+  byId: Map<string, HTMLElement>;
+}
+
+function assertSceneTargets(scenes: Record<SceneSection, SectionScene>): SceneTargets {
   const usedTargets = new Map<string, string>();
+  const byElement = new Map<Element, string>();
+  const byId = new Map<string, HTMLElement>();
+
   for (const scene of Object.values(scenes)) {
     for (const node of scene.nodes) {
       const previousNode = usedTargets.get(node.target);
@@ -35,8 +45,18 @@ function assertSceneTargets(scenes: Record<SceneSection, SectionScene>): void {
       if (matches.length !== 1) {
         throw new Error(`Scene target '${node.target}' for '${node.id}' resolved to ${matches.length} elements.`);
       }
+
+      const element = matches[0];
+      const owner = byElement.get(element);
+      if (owner) {
+        throw new Error(`Scene nodes '${owner}' and '${node.id}' resolve to the same element.`);
+      }
+      byElement.set(element, node.id);
+      byId.set(node.id, element);
     }
   }
+
+  return { byElement, byId };
 }
 
 function textSpan(className: string, text: string): HTMLSpanElement {
@@ -56,8 +76,9 @@ export function initSceneNav(
   onRelease: () => void,
   scenes: Record<SceneSection, SectionScene>,
   guideCopy: SceneGuideCopy,
+  onDomHover: (id: string | null) => void,
 ): SceneNav {
-  assertSceneTargets(scenes);
+  const targets = assertSceneTargets(scenes);
 
   const tip = document.createElement('div');
   tip.className = 'scene-tip';
@@ -84,10 +105,20 @@ export function initSceneNav(
   const overlay = document.getElementById('case');
   let highlighted: HTMLElement | null = null;
   let highlightTimer = 0;
+  let linked: HTMLElement | null = null;
+  let linkedId: string | null = null;
   let label = '';
   let halfWidth = 0;
   let activeSection = 'hero';
   let disposed = false;
+
+  /** Scene → DOM: mark the card the hovered node stands for. */
+  const setLinked = (element: HTMLElement | null): void => {
+    if (linked === element) return;
+    linked?.classList.remove('is-scene-linked');
+    linked = element;
+    element?.classList.add('is-scene-linked');
+  };
 
   const resetGuide = (): void => {
     guide.classList.remove('scene-guide--active', 'scene-guide--selected');
@@ -110,8 +141,22 @@ export function initSceneNav(
   const hide = (): void => {
     tip.classList.remove('scene-tip--visible');
     cursor?.classList.remove('cursor--node');
+    setLinked(null);
     resetGuide();
   };
+
+  /** DOM → scene: the card under the pointer lights up the node it belongs to. */
+  const handlePointerOver = (event: PointerEvent): void => {
+    if (disposed) return;
+    const element = event.target instanceof Element
+      ? event.target.closest<HTMLElement>('[data-scene-target], [data-project]')
+      : null;
+    const id = element ? targets.byElement.get(element) ?? null : null;
+    if (id === linkedId) return;
+    linkedId = id;
+    onDomHover(id);
+  };
+  document.addEventListener('pointerover', handlePointerOver, { passive: true });
 
   const handleKeydown = (event: KeyboardEvent): void => {
     if (event.key !== 'Escape') return;
@@ -140,6 +185,7 @@ export function initSceneNav(
       tip.style.transform = `translate(${Math.round(x - halfWidth)}px, ${Math.round(y)}px)`;
       tip.classList.add('scene-tip--visible');
       cursor?.classList.add('cursor--node');
+      setLinked(targets.byId.get(pointer.node.id) ?? null);
 
       if (activeSection === 'hero') {
         guide.classList.add('scene-guide--active');
@@ -182,6 +228,7 @@ export function initSceneNav(
       if (disposed) return;
       disposed = true;
       document.removeEventListener('keydown', handleKeydown);
+      document.removeEventListener('pointerover', handlePointerOver);
       clearHighlight();
       hide();
       tip.remove();

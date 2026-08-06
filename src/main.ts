@@ -152,7 +152,13 @@ async function boot(): Promise<void> {
       onNodeSelect: (pointer) => nav?.select(pointer),
     });
     try {
-      nav = initSceneNav(reducedMotion, () => experience.releaseFocus(), scenes, sceneGuide);
+      nav = initSceneNav(
+        reducedMotion,
+        () => experience.releaseFocus(),
+        scenes,
+        sceneGuide,
+        (id) => experience.setDomHover(id),
+      );
     } catch (error) {
       experience.dispose();
       throw error;

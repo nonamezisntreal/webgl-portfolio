@@ -227,6 +227,8 @@ uniform sampler2D tDiffuse;
 uniform float uTime;
 uniform float uAberration;
 uniform float uVignette;
+uniform vec3 uTint;
+uniform float uTintAmount;
 
 varying vec2 vUv;
 
@@ -243,6 +245,9 @@ void main() {
   float g = texture2D(tDiffuse, uv).g;
   float b = texture2D(tDiffuse, uv - dir).b;
   vec3 color = vec3(r, g, b);
+
+  // the scene borrows the accent of the project the pointer rests on
+  color = mix(color, color * uTint, uTintAmount);
 
   // soft vignette
   float vig = smoothstep(0.95, 0.25, dist * uVignette);

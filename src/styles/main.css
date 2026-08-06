@@ -425,6 +425,13 @@ body.is-ready .scene-guide:not(.scene-guide--hidden) {
   }
 }
 
+/* card whose scene node is hovered right now — the reverse of the link above */
+.is-scene-linked {
+  box-shadow:
+    0 0 0 1px rgba(103, 232, 249, 0.38),
+    0 0 24px rgba(103, 232, 249, 0.13);
+}
+
 /* ── Header ───────────────────────────────────────────────── */
 .header {
   position: fixed;
