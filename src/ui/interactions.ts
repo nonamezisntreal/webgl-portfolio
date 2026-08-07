@@ -1,3 +1,5 @@
+import { approach, frameDelta, UI_POINTER_RATE } from '../motion';
+
 /**
  * Extra premium micro-interactions: magnetic controls, click ripples, page light beam.
  * All continuous motion is lerped in rAF loops — no CSS transition fighting,
@@ -29,10 +31,14 @@ export function bindMagnetic(): void {
     let curY = 0;
     let raf = 0;
     let inside = false;
+    let lastFrame = 0;
 
-    const tick = () => {
-      curX += (targetX - curX) * 0.16;
-      curY += (targetY - curY) * 0.16;
+    const tick = (now: number) => {
+      const delta = frameDelta(now, lastFrame);
+      lastFrame = now;
+      const weight = approach(UI_POINTER_RATE, delta);
+      curX += (targetX - curX) * weight;
+      curY += (targetY - curY) * weight;
       el.style.setProperty('--mag-x', `${curX.toFixed(2)}px`);
       el.style.setProperty('--mag-y', `${curY.toFixed(2)}px`);
 
@@ -40,6 +46,7 @@ export function bindMagnetic(): void {
         raf = requestAnimationFrame(tick);
       } else {
         raf = 0;
+        lastFrame = 0;
         curX = 0;
         curY = 0;
         el.style.setProperty('--mag-x', '0px');
@@ -48,7 +55,9 @@ export function bindMagnetic(): void {
     };
 
     const start = () => {
-      if (!raf) raf = requestAnimationFrame(tick);
+      if (raf) return;
+      lastFrame = performance.now();
+      raf = requestAnimationFrame(tick);
     };
 
     el.addEventListener('pointerenter', () => {

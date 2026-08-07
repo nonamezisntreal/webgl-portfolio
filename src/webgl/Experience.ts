@@ -4,7 +4,7 @@ import { Particles } from './Particles';
 import { Rings } from './Rings';
 import { PostFX } from './PostFX';
 import { Nodes } from './Nodes';
-import { approach } from './motion';
+import { approach } from '../motion';
 import type { SceneNode, SceneSection, SectionScene } from '../scene-nodes';
 
 const ACCENT_A = new THREE.Color('#67e8f9');
@@ -28,8 +28,8 @@ const MOUSE_RATE = 3.71;
 const SECTION_RATE = 2.14;
 const FOCUS_RATE = 5;
 const PASSAGE_RATE = 6.32;
-/** A step long enough for every approach to land and every decay to be spent. */
-const SETTLE_STEP = 1;
+/** Deterministic shader time used by the non-animated reduced-motion frame. */
+const STATIC_TIME = 2.5;
 
 export interface NodePointer {
   node: SceneNode;
@@ -47,6 +47,8 @@ export interface ExperienceOptions {
   onFps?: (fps: number) => void;
   onNodeHover?: (pointer: NodePointer | null) => void;
   onNodeSelect?: (pointer: NodePointer) => void;
+  /** Section selected by the initial URL before ordinary traversal begins. */
+  initialSection?: string;
 }
 
 interface ExtendedNavigator extends Navigator {
@@ -112,6 +114,8 @@ export class Experience {
   /** The page is on its last section, and whether that ending has been played. */
   private closing = false;
   private closed = false;
+  /** A direct initial #contact arrival is not evidence that the page was traversed. */
+  private suppressInitialContactFinale = false;
 
   private readonly reducedMotion: boolean;
   private readonly isLowPower: boolean;
@@ -151,10 +155,11 @@ export class Experience {
     else if (this.requestedRunning && !document.hidden) this.resumeLoop();
   };
 
-  constructor({ canvas, reducedMotion, scenes, onFps, onNodeHover, onNodeSelect }: ExperienceOptions) {
+  constructor({ canvas, reducedMotion, scenes, onFps, onNodeHover, onNodeSelect, initialSection }: ExperienceOptions) {
     this.canvas = canvas;
     this.reducedMotion = reducedMotion;
     this.scenes = scenes;
+    this.suppressInitialContactFinale = initialSection === 'contact';
     this.onFps = onFps;
     this.onNodeHover = onNodeHover;
     this.onNodeSelect = onNodeSelect;
@@ -197,7 +202,11 @@ export class Experience {
   }
 
   setScroll(progress: number): void {
-    this.scroll = Math.min(1, Math.max(0, progress));
+    const next = Math.min(1, Math.max(0, progress));
+    if (next === this.scroll) return;
+    this.scroll = next;
+    // Reduced motion has no loop, but scroll is still legitimate static state.
+    if (this.reducedMotion) this.renderOnce();
   }
 
   /**
@@ -210,9 +219,23 @@ export class Experience {
   }
 
   setSection(name: string): void {
-    // arriving at the last section arms the closing beat; leaving it re-arms
-    this.closing = name === 'contact';
-    if (name !== this.section) this.closed = false;
+    const previous = this.section;
+    const changed = name !== previous;
+
+    // A URL that starts on #contact has not completed a traversal. Ignore that
+    // initial arrival (and any observer noise before it); only a genuine leave
+    // from contact clears the suppression and allows a later return to end.
+    if (this.suppressInitialContactFinale) {
+      if (previous === 'contact' && name !== 'contact') {
+        this.suppressInitialContactFinale = false;
+        this.closing = false;
+      } else {
+        this.closing = false;
+      }
+    } else {
+      this.closing = name === 'contact';
+    }
+    if (changed) this.closed = false;
     this.section = name;
 
     const offsets: Record<string, [number, number, number]> = {
@@ -376,21 +399,40 @@ export class Experience {
   }
 
   /**
-   * The one frame reduced motion gets. It must show the settled scene, not a
-   * step toward it: with the smoothing measured in seconds, a step of one
-   * second lands every approach on its target and leaves every decay spent, so
-   * what is drawn depends on the scroll and hover state alone — not on how many
-   * times this happens to have been called.
+   * Reduced motion renders a deterministic snapshot, not a simulated chunk of
+   * elapsed time. Every temporal response is either snapped to its logical
+   * target or disabled, so repeated calls with the same state are idempotent.
    */
   renderOnce(): void {
     if (this.disposed || this.contextLost) return;
-    const time = 2.5;
-    const delta = SETTLE_STEP;
-    this.core.update(time, delta, this.smoothMouse, this.scroll);
-    this.particles.update(time, delta, this.scroll);
-    this.rings.update(time, delta, this.smoothMouse, this.scroll, true);
-    this.nodes.update(time, delta, this.scroll, true);
-    this.postfx.render(time, delta);
+
+    // Pointer parallax/reach is motion. Static hover remains represented by the
+    // node attention and grade, but resize or another unrelated invalidation
+    // must not make the last pointer coordinate suddenly move the whole scene.
+    this.smoothMouse.set(0, 0);
+    this.sectionOffset.copy(this.targetSectionOffset);
+    this.passage = 0;
+    this.targetPassage = 0;
+    this.focusWeight = 0;
+    this.focusHold = 0;
+    this.nodes.setPull(null);
+    this.rings.setPassage(0);
+
+    this.cameraBase.set(
+      this.sectionOffset.x,
+      this.sectionOffset.y - this.scroll * 0.4,
+      CAMERA_DISTANCE + this.sectionOffset.z + this.scroll * 2.4,
+    );
+    this.lookTarget.set(0, 0, 0);
+    this.camera.position.copy(this.cameraBase);
+    this.camera.lookAt(this.lookTarget);
+
+    this.postfx.setBloomScale(1 - this.scroll * 0.45);
+    this.core.renderStatic(STATIC_TIME, this.smoothMouse, this.scroll);
+    this.particles.renderStatic(STATIC_TIME, this.scroll);
+    this.rings.renderStatic(STATIC_TIME, this.smoothMouse, this.scroll);
+    this.nodes.renderStatic(STATIC_TIME, this.scroll);
+    this.postfx.renderStatic(STATIC_TIME);
   }
 
   dispose(): void {

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Formation, SceneNode, SectionScene } from '../scene-nodes';
-import { approach } from './motion';
+import { approach } from '../motion';
 
 interface NodeState {
   readonly target: THREE.Vector3;
@@ -11,6 +11,9 @@ interface NodeState {
   readonly rendered: THREE.Vector3;
   readonly color: THREE.Color;
   readonly restColor: THREE.Color;
+  /** Base formation scale before fade/hover/breathe/selection effects. */
+  assemblyScale: number;
+  /** Last rendered/effected scale. */
   scale: number;
   targetScale: number;
   hover: number;
@@ -30,7 +33,7 @@ const GOLDEN_ANGLE = Math.PI * (1 + Math.sqrt(5));
 const PULL_REACH = 0.26;
 /** Seconds a whole formation takes to assemble, and the share of that spent staggering. */
 const REFORM_SECONDS = 1.1;
-const REFORM_STAGGER = 0.45;
+const REFORM_STAGGER = 0.5;
 /** Approach rates per second; see motion.ts for why they are not per frame. */
 const ATTENTION_RATE = 7.67;
 const HOVER_RATE = 9.05;
@@ -166,6 +169,7 @@ export class Nodes {
         rendered: new THREE.Vector3(),
         color: accent.clone(),
         restColor: accent.clone(),
+        assemblyScale: 0,
         scale: 0,
         targetScale: 0,
         hover: 0,
@@ -208,7 +212,7 @@ export class Nodes {
       // the move is measured from wherever the node stands, so an interrupted
       // re-formation carries on from where it got to rather than snapping back
       state.origin.copy(state.current);
-      state.originScale = state.targetScale;
+      state.originScale = state.assemblyScale;
       state.travel = 0;
 
       if (!node) {
@@ -251,19 +255,28 @@ export class Nodes {
     return out.copy(this.states[index].rendered).applyMatrix4(this.group.matrixWorld);
   }
 
-  update(time: number, delta: number, scroll: number, immediate = false): void {
+  update(time: number, delta: number, scroll: number): void {
+    this.renderState(time, delta, scroll, false);
+  }
+
+  /** Render the exact resting formation without advancing any temporal state. */
+  renderStatic(time: number, scroll: number): void {
+    this.renderState(time, 0, scroll, true);
+  }
+
+  private renderState(time: number, delta: number, scroll: number, staticFrame: boolean): void {
     // content sections must stay readable, so the layer calms down as the page scrolls
     const fade = 1 - scroll * 0.35;
 
     // one node under attention pushes the rest of the constellation into the background
     const attentionTarget = this.hovered >= 0 ? 1 : 0;
-    this.attention = immediate
+    this.attention = staticFrame
       ? attentionTarget
       : this.attention + (attentionTarget - this.attention) * approach(ATTENTION_RATE, delta);
     const ambient = 1 - this.attention * 0.42;
 
-    // the reach is a per-frame offset, so it has no meaning in a single static render
-    const reaching = this.pulling && !immediate;
+    // the reach is a temporal pointer response, so it has no meaning in a static frame
+    const reaching = this.pulling && !staticFrame;
     if (reaching) {
       inverseWorld.copy(this.group.matrixWorld).invert();
       localPull.copy(this.pull).applyMatrix4(inverseWorld);
@@ -272,10 +285,10 @@ export class Nodes {
     for (let i = 0; i < this.states.length; i++) {
       const state = this.states[i];
 
-      let size = state.targetScale;
-      if (immediate) {
+      if (staticFrame) {
         state.travel = 1;
         state.current.copy(state.target);
+        state.assemblyScale = state.targetScale;
         state.hover = state.targetHover;
       } else {
         // every node moves for the same stretch; its place in the order only
@@ -286,23 +299,23 @@ export class Nodes {
         );
         const eased = 1 - Math.pow(1 - moved, 3);
         state.current.lerpVectors(state.origin, state.target, eased);
-        // size rides the same curve as the move, so a node leaving a section is
-        // visibly carried home instead of going out where it stands
-        size = THREE.MathUtils.lerp(state.originScale, state.targetScale, eased);
+        // Assembly scale is geometric state. Effects below never become the origin
+        // of a later formation, so fade/hover/pulse cannot be double-applied.
+        state.assemblyScale = THREE.MathUtils.lerp(state.originScale, state.targetScale, eased);
         state.hover += (state.targetHover - state.hover) * approach(HOVER_RATE, delta);
       }
 
       const selectedPulse = i === this.selected
-        ? immediate ? 0.18 : 0.18 + Math.sin(time * 4) * 0.06
+        ? staticFrame ? 0.18 : 0.18 + Math.sin(time * 4) * 0.06
         : 0;
-      const breathe = immediate ? 1 : 1 + Math.sin(time * 0.9 + state.phase) * 0.05;
-      const wanted = size * breathe * fade * (1 + state.hover * 0.85 + selectedPulse);
-      if (immediate) state.scale = wanted;
+      const breathe = staticFrame ? 1 : 1 + Math.sin(time * 0.9 + state.phase) * 0.05;
+      const wanted = state.assemblyScale * breathe * fade * (1 + state.hover * 0.85 + selectedPulse);
+      if (staticFrame) state.scale = wanted;
       else state.scale += (wanted - state.scale) * approach(SCALE_RATE, delta);
 
       state.rendered.set(
         state.current.x * this.spread,
-        state.current.y + (immediate ? 0 : Math.sin(time * 0.6 + state.phase) * 0.07),
+        state.current.y + (staticFrame ? 0 : Math.sin(time * 0.6 + state.phase) * 0.07),
         state.current.z * this.spread,
       );
       // hover phase 1: the node leans toward the pointer, and its hitbox with it
@@ -312,7 +325,7 @@ export class Nodes {
       }
 
       this.dummy.position.copy(state.rendered);
-      if (immediate) this.dummy.rotation.set(0, 0, 0);
+      if (staticFrame) this.dummy.rotation.set(0, 0, 0);
       else this.dummy.rotation.set(time * state.spin, time * state.spin * 0.7, 0);
       this.dummy.scale.setScalar(Math.max(state.scale, 0));
       this.dummy.updateMatrix();
@@ -327,7 +340,7 @@ export class Nodes {
     this.mesh.instanceMatrix.needsUpdate = true;
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
 
-    this.group.rotation.y = immediate ? 0 : time * 0.03;
+    this.group.rotation.y = staticFrame ? 0 : time * 0.03;
     this.group.updateMatrixWorld(true);
   }
 }

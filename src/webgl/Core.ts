@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { coreVertex, coreFragment, haloVertex, haloFragment } from './shaders';
-import { approach } from './motion';
+import { approach } from '../motion';
 
 const inverseRotation = new THREE.Quaternion();
 /** Approach rates per second; see motion.ts for why they are not per frame. */
@@ -103,9 +103,25 @@ export class Core {
     u.uMouse.value.lerp(mouse, approach(POINTER_RATE, delta));
     u.uAmp.value = THREE.MathUtils.lerp(u.uAmp.value, 0.25 + scroll * 0.4, approach(AMP_RATE, delta));
     u.uHueShift.value = THREE.MathUtils.lerp(u.uHueShift.value, scroll, approach(SCROLL_RATE, delta));
-    // fade the energy down as the user scrolls so content stays readable
     u.uDim.value = THREE.MathUtils.lerp(u.uDim.value, 1 - scroll * 0.72, approach(SCROLL_RATE, delta));
+    this.applyPose(time, mouse, scroll);
+  }
 
+  /** Render the exact non-transient state represented by the current inputs. */
+  renderStatic(time: number, mouse: THREE.Vector2, scroll: number): void {
+    const u = this.orbMaterial.uniforms;
+    u.uTime.value = time;
+    u.uVelocity.value = 0;
+    u.uRippleAge.value = 0;
+    u.uRipple.value = 0;
+    u.uMouse.value.copy(mouse);
+    u.uAmp.value = 0.25 + scroll * 0.4;
+    u.uHueShift.value = scroll;
+    u.uDim.value = 1 - scroll * 0.72;
+    this.applyPose(time, mouse, scroll);
+  }
+
+  private applyPose(time: number, mouse: THREE.Vector2, scroll: number): void {
     this.group.rotation.y = time * 0.08 + mouse.x * 0.25;
     this.group.rotation.x = mouse.y * 0.15 + scroll * 0.6;
 

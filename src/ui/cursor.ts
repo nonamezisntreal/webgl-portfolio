@@ -1,3 +1,5 @@
+import { approach, frameDelta, UI_POINTER_RATE } from '../motion';
+
 /**
  * Custom cursor: instant dot + lagging glow ring.
  * Enabled only on pointer-fine devices without reduced motion.
@@ -18,6 +20,7 @@ export function initCursor(reducedMotion: boolean): void {
 
   let x = -100, y = -100;
   let rx = -100, ry = -100;
+  let lastFrame = performance.now();
 
   window.addEventListener('pointermove', (e) => {
     x = e.clientX;
@@ -25,9 +28,12 @@ export function initCursor(reducedMotion: boolean): void {
     dot.style.transform = `translate(${x}px, ${y}px)`;
   }, { passive: true });
 
-  const loop = () => {
-    rx += (x - rx) * 0.16;
-    ry += (y - ry) * 0.16;
+  const loop = (now: number) => {
+    const delta = frameDelta(now, lastFrame);
+    lastFrame = now;
+    const weight = approach(UI_POINTER_RATE, delta);
+    rx += (x - rx) * weight;
+    ry += (y - ry) * weight;
     ring.style.transform = `translate(${rx}px, ${ry}px)`;
     requestAnimationFrame(loop);
   };

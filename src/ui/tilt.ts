@@ -1,3 +1,5 @@
+import { approach, frameDelta, UI_TILT_RATE } from '../motion';
+
 /**
  * 3D tilt + cursor-tracked glow for cards marked with `data-tilt`.
  * Rotation is lerped in a rAF loop and the CSS transform transition is
@@ -18,10 +20,14 @@ export function initTilt(reducedMotion: boolean): void {
     let curRY = 0;
     let raf = 0;
     let inside = false;
+    let lastFrame = 0;
 
-    const tick = () => {
-      curRX += (targetRX - curRX) * 0.12;
-      curRY += (targetRY - curRY) * 0.12;
+    const tick = (now: number) => {
+      const delta = frameDelta(now, lastFrame);
+      lastFrame = now;
+      const weight = approach(UI_TILT_RATE, delta);
+      curRX += (targetRX - curRX) * weight;
+      curRY += (targetRY - curRY) * weight;
 
       if (inside || Math.abs(targetRX - curRX) + Math.abs(targetRY - curRY) > 0.02) {
         card.style.transform =
@@ -29,6 +35,7 @@ export function initTilt(reducedMotion: boolean): void {
         raf = requestAnimationFrame(tick);
       } else {
         raf = 0;
+        lastFrame = 0;
         curRX = 0;
         curRY = 0;
         card.style.transform = '';
@@ -37,7 +44,9 @@ export function initTilt(reducedMotion: boolean): void {
     };
 
     const start = () => {
-      if (!raf) raf = requestAnimationFrame(tick);
+      if (raf) return;
+      lastFrame = performance.now();
+      raf = requestAnimationFrame(tick);
     };
 
     card.addEventListener('pointerenter', () => {

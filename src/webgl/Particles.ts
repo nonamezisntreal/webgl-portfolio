@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { particlesVertex, particlesFragment } from './shaders';
-import { approach } from './motion';
+import { approach } from '../motion';
 
 /** Approach rate per second; see motion.ts for why it is not per frame. */
 const SPREAD_RATE = 3.08;
@@ -77,6 +77,14 @@ export class Particles {
       scroll,
       approach(SPREAD_RATE, delta),
     );
+    this.group.rotation.y = time * 0.012;
+  }
+
+  /** Render the exact non-transient state represented by scroll. */
+  renderStatic(time: number, scroll: number): void {
+    this.material.uniforms.uTime.value = time;
+    this.material.uniforms.uImpulse.value = 0;
+    this.material.uniforms.uSpread.value = scroll;
     this.group.rotation.y = time * 0.012;
   }
 }

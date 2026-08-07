@@ -150,6 +150,7 @@ async function boot(): Promise<void> {
       canvas,
       reducedMotion,
       scenes,
+      initialSection: window.location.hash === '#contact' ? 'contact' : undefined,
       onFps: (fps) => {
         if (fpsLabel) fpsLabel.textContent = `${fps} fps`;
       },

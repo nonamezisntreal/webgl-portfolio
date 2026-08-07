@@ -4,7 +4,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { gradeVertex, gradeFragment } from './shaders';
-import { approach } from './motion';
+import { approach } from '../motion';
 
 /** Approach rate per second; see motion.ts for why it is not per frame. */
 const TINT_RATE = 5.66;
@@ -89,10 +89,20 @@ export class PostFX {
 
   render(time: number, delta: number): void {
     this.flashValue *= Math.exp(-delta * 3.2);
-
     this.tint.lerp(this.atmosphere, approach(TINT_RATE, delta));
     this.tintAmount += (this.atmosphereWeight - this.tintAmount) * approach(TINT_RATE, delta);
+    this.draw(time);
+  }
 
+  /** Render the exact non-transient grade for the current atmosphere. */
+  renderStatic(time: number): void {
+    this.flashValue = 0;
+    this.tint.copy(this.atmosphere);
+    this.tintAmount = this.atmosphereWeight;
+    this.draw(time);
+  }
+
+  private draw(time: number): void {
     this.bloom.strength = this.baseBloom * this.bloomScale * (1 + this.flashValue * 1.6);
     this.grade.uniforms.uTime.value = time;
     this.grade.uniforms.uTintAmount.value = this.tintAmount;
