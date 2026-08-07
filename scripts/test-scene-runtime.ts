@@ -235,6 +235,46 @@ stillEnding.experience.setSection('contact');
 stillEnding.settle();
 assert(stillEnding.struck.length === 0, 'Reduced motion fired a per-frame decay it renders no frames for.');
 
+/* Smoothing is measured in seconds, not in frames: one second of animation has
+   to leave the scene in the same place whether the machine drew 30 frames of it
+   or 120. */
+function settleOverOneSecond(fps: number) {
+  const orb = new Core(colorA, colorB);
+  const field = new Particles(colorA, colorB, 8);
+  const layer = new Nodes(colorA, colorB, sceneNodes.length);
+  layer.setSection(scene);
+  layer.setHovered(0);
+  const step = 1 / fps;
+  for (let frame = 0; frame < fps; frame++) {
+    const at = frame * step;
+    orb.update(at, step, mouse, 1);
+    field.update(at, step, 1);
+    layer.update(at, step, 1);
+  }
+  return {
+    dim: privateValue<THREE.ShaderMaterial>(orb, 'orbMaterial').uniforms.uDim.value as number,
+    spread: privateValue<THREE.ShaderMaterial>(field, 'material').uniforms.uSpread.value as number,
+    attention: privateValue<number>(layer, 'attention'),
+  };
+}
+const slowMachine = settleOverOneSecond(30);
+const fastMachine = settleOverOneSecond(120);
+assert(slowMachine.dim < 0.95 && slowMachine.spread > 0.05 && slowMachine.attention > 0.05,
+  'The frame-rate check never let the scene move at all.');
+assert(Math.abs(slowMachine.dim - fastMachine.dim) < 1e-9, 'The core dims at a rate per frame instead of per second.');
+assert(Math.abs(slowMachine.spread - fastMachine.spread) < 1e-9, 'The particle field spreads at a rate per frame instead of per second.');
+assert(Math.abs(slowMachine.attention - fastMachine.attention) < 1e-9, 'The constellation shifts attention at a rate per frame instead of per second.');
+
+/* The drift is a wander gathered over a run of frames; a static render is not
+   one, and repeating it must leave the rings where they were. */
+const stillRings = new Rings(colorA, colorB);
+const heldPointer = new THREE.Vector2(0, 1);
+stillRings.update(2.5, 1, heldPointer, 1, true);
+stillRings.update(2.5, 1, heldPointer, 1, true);
+assert(privateValue<number[]>(stillRings, 'ringDrift').every((value) => value === 0), 'A static render nudged the ring drift along.');
+stillRings.update(2.5, 0.5, heldPointer, 1);
+assert(privateValue<number[]>(stillRings, 'ringDrift').some((value) => value !== 0), 'The rings stopped drifting while the scene is running.');
+
 const undersized = new Nodes(colorA, colorB, 1);
 let overflowRejected = false;
 try {
@@ -244,4 +284,4 @@ try {
 }
 assert(overflowRejected, 'Node capacity overflow was silently truncated instead of rejected.');
 
-console.log('Scene runtime regression tests passed: shared delta decay, static reduced motion, full capacity, ordered assembly, re-armable ending, bounded reach, reversible passage, hint replacement and overflow rejection.');
+console.log('Scene runtime regression tests passed: shared delta decay, frame-rate independent smoothing, static reduced motion, full capacity, ordered assembly, re-armable ending, bounded reach, reversible passage, hint replacement and overflow rejection.');

@@ -4,6 +4,10 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { gradeVertex, gradeFragment } from './shaders';
+import { approach } from './motion';
+
+/** Approach rate per second; see motion.ts for why it is not per frame. */
+const TINT_RATE = 5.66;
 
 /**
  * Post-processing chain: render → bloom → final grade
@@ -86,8 +90,8 @@ export class PostFX {
   render(time: number, delta: number): void {
     this.flashValue *= Math.exp(-delta * 3.2);
 
-    this.tint.lerp(this.atmosphere, 0.09);
-    this.tintAmount += (this.atmosphereWeight - this.tintAmount) * 0.09;
+    this.tint.lerp(this.atmosphere, approach(TINT_RATE, delta));
+    this.tintAmount += (this.atmosphereWeight - this.tintAmount) * approach(TINT_RATE, delta);
 
     this.bloom.strength = this.baseBloom * this.bloomScale * (1 + this.flashValue * 1.6);
     this.grade.uniforms.uTime.value = time;

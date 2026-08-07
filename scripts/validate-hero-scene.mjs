@@ -2,13 +2,14 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 const root = resolve(process.env.PROJECT_ROOT ?? process.cwd());
-const [particles, rings, core, postFx, experience, nodes, sceneNodes, sceneNav, intro, scroll, projects, styles, indexHtml] = await Promise.all([
+const [particles, rings, core, postFx, experience, nodes, motion, sceneNodes, sceneNav, intro, scroll, projects, styles, indexHtml] = await Promise.all([
   readFile(resolve(root, 'src/webgl/Particles.ts'), 'utf8'),
   readFile(resolve(root, 'src/webgl/Rings.ts'), 'utf8'),
   readFile(resolve(root, 'src/webgl/Core.ts'), 'utf8'),
   readFile(resolve(root, 'src/webgl/PostFX.ts'), 'utf8'),
   readFile(resolve(root, 'src/webgl/Experience.ts'), 'utf8'),
   readFile(resolve(root, 'src/webgl/Nodes.ts'), 'utf8'),
+  readFile(resolve(root, 'src/webgl/motion.ts'), 'utf8'),
   readFile(resolve(root, 'src/scene-nodes.ts'), 'utf8'),
   readFile(resolve(root, 'src/ui/sceneNav.ts'), 'utf8'),
   readFile(resolve(root, 'src/ui/intro.ts'), 'utf8'),
@@ -112,6 +113,15 @@ assert(/this\.core\.update\(time, delta/u.test(experience)
   && /this\.particles\.update\(time, delta/u.test(experience)
   && /this\.rings\.update\(time, delta/u.test(experience)
   && /this\.postfx\.render\(time, delta\)/u.test(experience), 'Experience must supply one shared frame delta to every transient effect.');
+
+/* Every smoothing is a rate per second, so the display cannot decide the feel. */
+assert(/export function approach\(rate: number, delta: number\): number/u.test(motion), 'The shared frame-rate independent smoothing is missing.');
+assert(/1 - Math\.exp\(-rate \* delta\)/u.test(motion), 'Smoothing must fall off with elapsed time rather than with frames.');
+for (const [label, source] of [['Experience.ts', experience], ['Core.ts', core], ['Nodes.ts', nodes], ['PostFX.ts', postFx], ['Particles.ts', particles]]) {
+  assert(/approach\([A-Z_]+_RATE, delta\)/u.test(source), `${label} still smooths by a per-frame factor.`);
+}
+assert(/const drifting = immediate \? 0 : delta;/u.test(rings), 'A lone static render must not accumulate the ring drift.');
+assert(/const delta = SETTLE_STEP;/u.test(experience), 'The static render must settle the scene rather than step it once.');
 
 assert(/scrollToElement\(/u.test(sceneNav), 'Scene selection must resolve to ordinary page navigation.');
 assert(/assertSceneTargets\(/u.test(sceneNav), 'Scene navigation must fail closed when a DOM target is missing or ambiguous.');

@@ -85,16 +85,21 @@ export class Rings {
     this.passage = Math.min(1, Math.max(0, value));
   }
 
-  update(time: number, delta: number, mouse: THREE.Vector2, scroll: number): void {
+  update(time: number, delta: number, mouse: THREE.Vector2, scroll: number, immediate = false): void {
     this.pulseValue *= Math.exp(-delta * 2.4);
     const flare = Math.sin(Math.PI * this.passage);
+    // the drift is a wander accumulated over a run of frames; a lone static
+    // render is not a run, and must not be able to nudge it
+    const drifting = immediate ? 0 : delta;
 
     for (let i = 0; i < this.rings.length; i++) {
       const ring = this.rings[i];
       const dir = i % 2 === 0 ? 1 : -1;
       const tilt = this.ringTilt[i];
       ring.rotation.z = time * 0.05 * dir;
-      this.ringDrift[i] += (mouse.y * 0.0006 - scroll * 0.0002) * dir;
+      // radians per second, so the drift a visitor accumulates does not depend
+      // on how many frames their machine managed to draw while they sat there
+      this.ringDrift[i] += (mouse.y * 0.036 - scroll * 0.012) * dir * drifting;
       // edge-on at rest, square to the viewer at the moment of crossing
       ring.rotation.x = this.ringDrift[i]
         + THREE.MathUtils.lerp(Math.PI / 2 + tilt, tilt * 0.25, this.passage);

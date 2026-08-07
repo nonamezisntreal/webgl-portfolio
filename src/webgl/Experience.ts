@@ -4,6 +4,7 @@ import { Particles } from './Particles';
 import { Rings } from './Rings';
 import { PostFX } from './PostFX';
 import { Nodes } from './Nodes';
+import { approach } from './motion';
 import type { SceneNode, SceneSection, SectionScene } from '../scene-nodes';
 
 const ACCENT_A = new THREE.Color('#67e8f9');
@@ -22,6 +23,13 @@ const CAMERA_DISTANCE = 6.2;
 const FORMATION_REACH = 2.6;
 /** How far the camera leans into the composition while crossing out of the hero. */
 const PASSAGE_DIVE = 0.9;
+/** Approach rates per second; see motion.ts for why they are not per frame. */
+const MOUSE_RATE = 3.71;
+const SECTION_RATE = 2.14;
+const FOCUS_RATE = 5;
+const PASSAGE_RATE = 6.32;
+/** A step long enough for every approach to land and every decay to be spent. */
+const SETTLE_STEP = 1;
 
 export interface NodePointer {
   node: SceneNode;
@@ -367,13 +375,20 @@ export class Experience {
     this.pauseLoop();
   }
 
+  /**
+   * The one frame reduced motion gets. It must show the settled scene, not a
+   * step toward it: with the smoothing measured in seconds, a step of one
+   * second lands every approach on its target and leaves every decay spent, so
+   * what is drawn depends on the scroll and hover state alone — not on how many
+   * times this happens to have been called.
+   */
   renderOnce(): void {
     if (this.disposed || this.contextLost) return;
     const time = 2.5;
-    const delta = 0;
+    const delta = SETTLE_STEP;
     this.core.update(time, delta, this.smoothMouse, this.scroll);
     this.particles.update(time, delta, this.scroll);
-    this.rings.update(time, delta, this.smoothMouse, this.scroll);
+    this.rings.update(time, delta, this.smoothMouse, this.scroll, true);
     this.nodes.update(time, delta, this.scroll, true);
     this.postfx.render(time, delta);
   }
@@ -682,16 +697,16 @@ export class Experience {
     this.elapsedTime += delta;
     const time = this.elapsedTime;
 
-    this.smoothMouse.lerp(this.mouse, 0.06);
-    this.sectionOffset.lerp(this.targetSectionOffset, 0.035);
+    this.smoothMouse.lerp(this.mouse, approach(MOUSE_RATE, delta));
+    this.sectionOffset.lerp(this.targetSectionOffset, approach(SECTION_RATE, delta));
     this.pointerSpeed *= Math.exp(-delta * 4);
     this.core.setVelocity(this.pointerSpeed);
 
     this.focusHold = Math.max(0, this.focusHold - delta);
     const focusing = this.focusIndex >= 0 && this.focusHold > 0 && !this.reducedMotion;
-    this.focusWeight += ((focusing ? 1 : 0) - this.focusWeight) * 0.08;
+    this.focusWeight += ((focusing ? 1 : 0) - this.focusWeight) * approach(FOCUS_RATE, delta);
 
-    this.passage += (this.targetPassage - this.passage) * 0.1;
+    this.passage += (this.targetPassage - this.passage) * approach(PASSAGE_RATE, delta);
 
     this.cameraBase.set(
       this.smoothMouse.x * 0.55 + this.sectionOffset.x,

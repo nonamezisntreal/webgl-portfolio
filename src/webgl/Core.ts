@@ -1,7 +1,13 @@
 import * as THREE from 'three';
 import { coreVertex, coreFragment, haloVertex, haloFragment } from './shaders';
+import { approach } from './motion';
 
 const inverseRotation = new THREE.Quaternion();
+/** Approach rates per second; see motion.ts for why they are not per frame. */
+const VELOCITY_RATE = 7.67;
+const POINTER_RATE = 3.08;
+const AMP_RATE = 2.45;
+const SCROLL_RATE = 3.08;
 
 /**
  * The "energy core": a noise-displaced glassy orb with a glowing rim
@@ -91,14 +97,14 @@ export class Core {
     const u = this.orbMaterial.uniforms;
 
     u.uTime.value = time;
-    u.uVelocity.value = THREE.MathUtils.lerp(u.uVelocity.value, this.velocity, 0.12);
+    u.uVelocity.value = THREE.MathUtils.lerp(u.uVelocity.value, this.velocity, approach(VELOCITY_RATE, delta));
     u.uRippleAge.value += delta;
     u.uRipple.value *= Math.exp(-delta * 2.6);
-    u.uMouse.value.lerp(mouse, 0.05);
-    u.uAmp.value = THREE.MathUtils.lerp(u.uAmp.value, 0.25 + scroll * 0.4, 0.04);
-    u.uHueShift.value = THREE.MathUtils.lerp(u.uHueShift.value, scroll, 0.05);
+    u.uMouse.value.lerp(mouse, approach(POINTER_RATE, delta));
+    u.uAmp.value = THREE.MathUtils.lerp(u.uAmp.value, 0.25 + scroll * 0.4, approach(AMP_RATE, delta));
+    u.uHueShift.value = THREE.MathUtils.lerp(u.uHueShift.value, scroll, approach(SCROLL_RATE, delta));
     // fade the energy down as the user scrolls so content stays readable
-    u.uDim.value = THREE.MathUtils.lerp(u.uDim.value, 1 - scroll * 0.72, 0.05);
+    u.uDim.value = THREE.MathUtils.lerp(u.uDim.value, 1 - scroll * 0.72, approach(SCROLL_RATE, delta));
 
     this.group.rotation.y = time * 0.08 + mouse.x * 0.25;
     this.group.rotation.x = mouse.y * 0.15 + scroll * 0.6;

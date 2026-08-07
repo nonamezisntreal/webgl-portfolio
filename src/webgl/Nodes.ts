@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Formation, SceneNode, SectionScene } from '../scene-nodes';
+import { approach } from './motion';
 
 interface NodeState {
   readonly target: THREE.Vector3;
@@ -30,6 +31,10 @@ const PULL_REACH = 0.26;
 /** Seconds a whole formation takes to assemble, and the share of that spent staggering. */
 const REFORM_SECONDS = 1.1;
 const REFORM_STAGGER = 0.45;
+/** Approach rates per second; see motion.ts for why they are not per frame. */
+const ATTENTION_RATE = 7.67;
+const HOVER_RATE = 9.05;
+const SCALE_RATE = 5.66;
 
 const inverseWorld = new THREE.Matrix4();
 const localPull = new THREE.Vector3();
@@ -252,7 +257,9 @@ export class Nodes {
 
     // one node under attention pushes the rest of the constellation into the background
     const attentionTarget = this.hovered >= 0 ? 1 : 0;
-    this.attention = immediate ? attentionTarget : this.attention + (attentionTarget - this.attention) * 0.12;
+    this.attention = immediate
+      ? attentionTarget
+      : this.attention + (attentionTarget - this.attention) * approach(ATTENTION_RATE, delta);
     const ambient = 1 - this.attention * 0.42;
 
     // the reach is a per-frame offset, so it has no meaning in a single static render
@@ -282,7 +289,7 @@ export class Nodes {
         // size rides the same curve as the move, so a node leaving a section is
         // visibly carried home instead of going out where it stands
         size = THREE.MathUtils.lerp(state.originScale, state.targetScale, eased);
-        state.hover += (state.targetHover - state.hover) * 0.14;
+        state.hover += (state.targetHover - state.hover) * approach(HOVER_RATE, delta);
       }
 
       const selectedPulse = i === this.selected
@@ -291,7 +298,7 @@ export class Nodes {
       const breathe = immediate ? 1 : 1 + Math.sin(time * 0.9 + state.phase) * 0.05;
       const wanted = size * breathe * fade * (1 + state.hover * 0.85 + selectedPulse);
       if (immediate) state.scale = wanted;
-      else state.scale += (wanted - state.scale) * 0.09;
+      else state.scale += (wanted - state.scale) * approach(SCALE_RATE, delta);
 
       state.rendered.set(
         state.current.x * this.spread,

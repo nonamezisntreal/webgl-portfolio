@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 import { particlesVertex, particlesFragment } from './shaders';
+import { approach } from './motion';
+
+/** Approach rate per second; see motion.ts for why it is not per frame. */
+const SPREAD_RATE = 3.08;
 
 /** Ambient starfield-style particles in a spherical shell around the core. */
 export class Particles {
@@ -71,7 +75,7 @@ export class Particles {
     this.material.uniforms.uSpread.value = THREE.MathUtils.lerp(
       this.material.uniforms.uSpread.value,
       scroll,
-      0.05,
+      approach(SPREAD_RATE, delta),
     );
     this.group.rotation.y = time * 0.012;
   }
