@@ -907,15 +907,19 @@ async function runPrimary(origin, results) {
       && rapidReopen.focus === 'case-close' && rapidReopen.sourceCards === 1,
     `Rapid case reopen corrupted lifecycle state: ${JSON.stringify(rapidReopen)}`);
     await cdp.key('Escape', 'Escape', 0, 20);
-    await sleep(700);
-    const dialogSettled = await cdp.evaluate(`(() => ({
-      open: document.getElementById('case').classList.contains('case--open'),
-      closing: document.getElementById('case').classList.contains('case--closing'),
-      inert: document.getElementById('case').inert,
-      sourceCards: document.querySelectorAll('.is-case-source').length,
-    }))()`);
-    assert(!dialogSettled.open && !dialogSettled.closing && dialogSettled.inert && dialogSettled.sourceCards === 0,
-      'The closed case left its ghost/card/semantic state behind.');
+    let dialogSettled = null;
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      dialogSettled = await cdp.evaluate(`(() => ({
+        open: document.getElementById('case').classList.contains('case--open'),
+        closing: document.getElementById('case').classList.contains('case--closing'),
+        inert: document.getElementById('case').inert,
+        sourceCards: document.querySelectorAll('.is-case-source').length,
+      }))()`);
+      if (!dialogSettled.open && !dialogSettled.closing && dialogSettled.inert && dialogSettled.sourceCards === 0) break;
+      await sleep(50);
+    }
+    assert(dialogSettled && !dialogSettled.open && !dialogSettled.closing && dialogSettled.inert && dialogSettled.sourceCards === 0,
+      `The closed case did not settle its ghost/card/semantic state: ${JSON.stringify(dialogSettled)}`);
 
     const sceneStyleOpen = await cdp.evaluate(`(() => {
       document.getElementById('footer-top')?.focus({ preventScroll: true });
