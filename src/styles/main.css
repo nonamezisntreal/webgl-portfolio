@@ -1070,8 +1070,8 @@ html[lang='en'] .lang-toggle::before { transform: translateX(100%); }
 
 .case--open { visibility: visible; pointer-events: auto; }
 
-/* The panel shrinking back into its card is a ghost: the case is already closed,
-   inert is already lifted and focus is already back on the page. */
+/* The panel shrinking back into its card is a visual ghost: the case itself is
+   inert, pointer-silent and aria-hidden while focus is already back on the page. */
 .case--closing { visibility: visible; pointer-events: none; }
 
 /* while the case is that card, the card itself steps aside */

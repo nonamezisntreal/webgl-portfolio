@@ -18,7 +18,7 @@ export function initProjectCases(reducedMotion: boolean, getLocale: () => Locale
   const closeBtn = document.getElementById('case-close')!;
   const backdrop = document.getElementById('case-backdrop')!;
 
-  let lastFocused: HTMLElement | null = null;
+  let fallbackFocused: HTMLElement | null = null;
   let source: HTMLElement | null = null;
   let travel: Animation | null = null;
   const backgroundRoots = [document.getElementById('header'), document.getElementById('content')].filter((node): node is HTMLElement => Boolean(node));
@@ -26,6 +26,20 @@ export function initProjectCases(reducedMotion: boolean, getLocale: () => Locale
   const setBackgroundInert = (inert: boolean) => {
     for (const root of backgroundRoots) root.inert = inert;
   };
+
+  const canRestoreFocus = (element: HTMLElement | null): element is HTMLElement =>
+    Boolean(element?.isConnected && element.tabIndex >= 0 && element.getAttribute('aria-hidden') !== 'true');
+
+  const restoreFocus = (): void => {
+    const target = canRestoreFocus(source)
+      ? source
+      : canRestoreFocus(fallbackFocused) ? fallbackFocused : null;
+    target?.focus();
+  };
+
+  // The static document starts hidden; keep that subtree out of sequential focus
+  // even before the first open/close lifecycle has happened.
+  overlay.inert = true;
 
   /** Where the panel has to come from, or null when the card is not in view. */
   const originOf = (card: HTMLElement | null): DOMRect | null => {
@@ -64,21 +78,24 @@ export function initProjectCases(reducedMotion: boolean, getLocale: () => Locale
   };
 
   const open = (project: Project, card: HTMLElement) => {
-    lastFocused = document.activeElement as HTMLElement;
+    fallbackFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    source?.classList.remove('is-case-source');
+    source = card;
+
     const locale = getLocale();
     body.innerHTML = caseTemplate(project, locale);
     closeBtn.setAttribute('aria-label', locale === 'ru' ? 'Закрыть описание проекта' : 'Close project details');
     bindMagnetic();
     panel.style.setProperty('--glow', project.glow);
     overlay.classList.remove('case--closing');
-    overlay.classList.add('case--open');
+    // Reopening during a reverse FLIP must restore semantics before moving focus.
+    overlay.inert = false;
     overlay.setAttribute('aria-hidden', 'false');
+    overlay.classList.add('case--open');
     setBackgroundInert(true);
     document.body.style.overflow = 'hidden';
     closeBtn.focus();
 
-    source?.classList.remove('is-case-source');
-    source = card;
     const from = originOf(card);
     if (!from) return;
     // the card is now the panel: two copies of it on screen would give that away
@@ -92,9 +109,12 @@ export function initProjectCases(reducedMotion: boolean, getLocale: () => Locale
        ghost, so nothing waits on it — not the focus, not the page behind. */
     overlay.classList.remove('case--open');
     overlay.setAttribute('aria-hidden', 'true');
+    // The reverse FLIP remains visible, but it is no longer a modal or a focus
+    // destination from the instant logical close happens.
+    overlay.inert = true;
     setBackgroundInert(false);
     document.body.style.overflow = '';
-    lastFocused?.focus();
+    restoreFocus();
 
     const card = source;
     const back = originOf(card);
