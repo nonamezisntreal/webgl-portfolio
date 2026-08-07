@@ -268,6 +268,7 @@ async function pageContract(cdp) {
     const sceneGuideStyle = sceneGuide ? getComputedStyle(sceneGuide) : null;
     const sceneGuidePointer = document.querySelector('.scene-guide__instruction--pointer');
     const sceneGuideTouch = document.querySelector('.scene-guide__instruction--touch');
+    const touchInstructionMedia = matchMedia('(hover: none), (pointer: coarse)').matches;
     return {
       title: document.title,
       lang: document.documentElement.lang,
@@ -300,6 +301,7 @@ async function pageContract(cdp) {
       closeLabel: document.getElementById('case-close')?.getAttribute('aria-label'),
       contactStatusRole: document.getElementById('contact-sent')?.getAttribute('role'),
       webglFallback: document.documentElement.classList.contains('webgl-fallback'),
+      touchInstructionMedia,
       sceneGuide: {
         exists: Boolean(sceneGuide),
         visible: Boolean(sceneGuideStyle && sceneGuideStyle.visibility !== 'hidden' && Number(sceneGuideStyle.opacity) > 0.5),
@@ -680,7 +682,10 @@ async function runPrimary(origin, results) {
     assert(desktop.heroEyebrow === 'доступен для проектов', 'Russian homepage primary shell is not localized.');
     assert(desktop.sceneGuide.exists && desktop.sceneGuide.visible, 'Russian scene onboarding guide is not visible.');
     assert(desktop.sceneGuide.title === 'Интерактивный фон' && desktop.sceneGuide.pointer === 'Наведи на светящийся ромб и нажми', 'Russian scene onboarding guide is not localized.');
-    assert(desktop.sceneGuide.pointerDisplay !== 'none' && desktop.sceneGuide.touchDisplay === 'none', 'Desktop scene onboarding shows the wrong input instruction.');
+    assert(desktop.touchInstructionMedia
+      ? desktop.sceneGuide.pointerDisplay === 'none' && desktop.sceneGuide.touchDisplay !== 'none'
+      : desktop.sceneGuide.pointerDisplay !== 'none' && desktop.sceneGuide.touchDisplay === 'none',
+    `Desktop scene onboarding disagrees with input media: ${JSON.stringify({ touchInstructionMedia: desktop.touchInstructionMedia, sceneGuide: desktop.sceneGuide })}`);
     assert(desktop.wrapperRole === 'group' && desktop.wrapperHref === null, 'Russian language switcher wrapper is not semantic.');
     assert(desktop.activeLocale === 'ru' && desktop.activeTag === 'span' && desktop.activeHref === null && desktop.activeTabIndex === null && desktop.activeAriaCurrent === 'page', 'Russian homepage active locale must be an inert span.');
     assert(desktop.inactiveLocale === 'en' && desktop.inactiveTag === 'a' && desktop.inactiveHref === `${basePath}en/` && desktop.inactiveHreflang === 'en', 'Russian homepage inactive EN link is incorrect.');
@@ -719,7 +724,10 @@ async function runPrimary(origin, results) {
     assert(english.heroEyebrow === 'available for projects' && english.navigationLabel === 'Primary navigation' && english.closeLabel === 'Close project details', 'English homepage primary shell or accessible labels are not localized.');
     assert(english.sceneGuide.exists && english.sceneGuide.visible, 'English scene onboarding guide is not visible.');
     assert(english.sceneGuide.title === 'Interactive background' && english.sceneGuide.pointer === 'Hover a glowing diamond and click', 'English scene onboarding guide is not localized.');
-    assert(english.sceneGuide.pointerDisplay !== 'none' && english.sceneGuide.touchDisplay === 'none', 'English desktop onboarding shows the wrong input instruction.');
+    assert(english.touchInstructionMedia
+      ? english.sceneGuide.pointerDisplay === 'none' && english.sceneGuide.touchDisplay !== 'none'
+      : english.sceneGuide.pointerDisplay !== 'none' && english.sceneGuide.touchDisplay === 'none',
+    `English desktop onboarding disagrees with input media: ${JSON.stringify({ touchInstructionMedia: english.touchInstructionMedia, sceneGuide: english.sceneGuide })}`);
     assert(english.wrapperRole === 'group' && english.wrapperHref === null, 'English language switcher wrapper is not semantic.');
     assert(english.activeLocale === 'en' && english.activeTag === 'span' && english.activeHref === null && english.activeTabIndex === null && english.activeAriaCurrent === 'page', 'English homepage active locale must be an inert span.');
     assert(english.inactiveLocale === 'ru' && english.inactiveTag === 'a' && english.inactiveHref === basePath && english.inactiveHreflang === 'ru', 'English homepage inactive RU link is incorrect.');
@@ -763,7 +771,10 @@ async function runPrimary(origin, results) {
       assert(contract.ready && contract.mainTextLength > 1000, `${viewport.id} did not render primary content.`);
       assert(contract.inactiveTarget && contract.inactiveTarget.width >= 44 && contract.inactiveTarget.height >= 44, `${viewport.id} inactive locale touch target is below 44×44px.`);
       assert(contract.sceneGuide.visible && contract.sceneGuide.title === 'Интерактивный фон', `${viewport.id} scene onboarding guide is missing.`);
-      assert(contract.sceneGuide.pointerDisplay === 'none' && contract.sceneGuide.touchDisplay !== 'none', `${viewport.id} does not show the touch-specific scene instruction.`);
+      assert(contract.touchInstructionMedia
+        ? contract.sceneGuide.pointerDisplay === 'none' && contract.sceneGuide.touchDisplay !== 'none'
+        : contract.sceneGuide.pointerDisplay !== 'none' && contract.sceneGuide.touchDisplay === 'none',
+      `${viewport.id} scene instruction disagrees with emulated input media.`);
       await cdp.screenshot(resolve(artifactDir, viewport.screenshot));
       results.push({ id: viewport.id, status: 'PASS', details: contract });
     }
