@@ -432,20 +432,31 @@ function finaleRiseCount(trace) {
 
 async function scrollWholeDocument(cdp) {
   return cdp.evaluate(`(async () => {
-    const pause = () => new Promise((resolve) => setTimeout(resolve, 45));
-    const step = Math.max(120, Math.round(innerHeight * 0.55));
-    const max = Math.max(0, document.documentElement.scrollHeight - innerHeight);
-    for (let y = 0; y <= max; y += step) {
-      scrollTo(0, Math.min(max, y));
-      await pause();
+    const armed = [...document.querySelectorAll('.reveal--armed')];
+    const visited = [];
+    const stuck = [];
+    for (const element of armed) {
+      if (element.classList.contains('in')) continue;
+      const rect = element.getBoundingClientRect();
+      const max = Math.max(0, document.documentElement.scrollHeight - innerHeight);
+      const targetY = Math.min(max, Math.max(0, rect.top + scrollY - innerHeight * 0.46));
+      scrollTo(0, targetY);
+      const deadline = performance.now() + 3000;
+      while (!element.classList.contains('in') && performance.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      visited.push({ tag: element.tagName, className: element.className, scrollY });
+      if (!element.classList.contains('in')) stuck.push({ tag: element.tagName, className: element.className, top: element.getBoundingClientRect().top });
     }
+    const max = Math.max(0, document.documentElement.scrollHeight - innerHeight);
     scrollTo(0, max);
-    await new Promise((resolve) => setTimeout(resolve, 500));
     return {
       scrollY,
       max,
       armed: document.querySelectorAll('.reveal--armed:not(.in)').length,
-      totalArmed: document.querySelectorAll('.reveal--armed').length,
+      totalArmed: armed.length,
+      visited: visited.length,
+      stuck,
     };
   })()`);
 }
@@ -987,8 +998,20 @@ async function runPrimary(origin, results) {
     await cdp.key('Escape', 'Escape');
     // Correct focus restoration may scroll an offscreen source card into view;
     // the hover idempotency probe is specifically a hero/static-formation test.
-    await cdp.evaluate(`document.getElementById('hero')?.scrollIntoView({block:'start'})`);
-    await sleep(260);
+    // Wait for the section observer to hand the scene back to hero instead of
+    // assuming a loaded CI runner will process that callback within N ms.
+    await cdp.evaluate('window.scrollTo(0, 0)');
+    let reducedHeroReady = null;
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      reducedHeroReady = await cdp.evaluate(`(() => ({
+        scrollY: window.scrollY,
+        guideHidden: document.querySelector('.scene-guide')?.classList.contains('scene-guide--hidden') ?? true,
+      }))()`);
+      if (reducedHeroReady.scrollY < 1 && !reducedHeroReady.guideHidden) break;
+      await sleep(50);
+    }
+    assert(reducedHeroReady && reducedHeroReady.scrollY < 1 && !reducedHeroReady.guideHidden,
+      `Reduced-motion scene never returned to hero before picking: ${JSON.stringify(reducedHeroReady)}`);
 
     const reducedLabel = await cdp.evaluate(`document.querySelector('[data-scene-target^="stack-"]')?.textContent?.trim()`);
     const reducedNode = await discoverSceneNodes(cdp, 1440, 900, [reducedLabel]);
