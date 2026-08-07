@@ -166,11 +166,11 @@ class Cdp {
     await sleep(1600);
   }
 
-  async key(key, code, modifiers = 0) {
+  async key(key, code, modifiers = 0, settleMs = 120) {
     const keyCode = key === 'Tab' ? 9 : key === 'Enter' ? 13 : key === 'Escape' ? 27 : 0;
     await this.send('Input.dispatchKeyEvent', { type: 'keyDown', key, code, modifiers, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode });
     await this.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, modifiers, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode });
-    await sleep(120);
+    if (settleMs > 0) await sleep(settleMs);
   }
 
   async screenshot(path) {
@@ -389,6 +389,65 @@ const drawCounterSource = `(() => {
   }
 })();`;
 
+const rippleTraceSource = `(() => {
+  const names = new WeakMap();
+  const trace = [];
+  Object.defineProperty(window, '__rippleTrace', { configurable: true, get: () => trace.slice() });
+  Object.defineProperty(window, '__clearRippleTrace', { configurable: true, value: () => { trace.length = 0; } });
+  const wrap = (prototype) => {
+    if (!prototype || prototype.__rippleTraced) return;
+    const getUniformLocation = prototype.getUniformLocation;
+    const uniform1f = prototype.uniform1f;
+    if (typeof getUniformLocation === 'function') {
+      prototype.getUniformLocation = function (program, name) {
+        const location = getUniformLocation.call(this, program, name);
+        if (location && typeof name === 'string') names.set(location, name);
+        return location;
+      };
+    }
+    if (typeof uniform1f === 'function') {
+      prototype.uniform1f = function (location, value) {
+        if (location && names.get(location) === 'uRipple') trace.push({ t: performance.now(), value: Number(value) });
+        return uniform1f.call(this, location, value);
+      };
+    }
+    Object.defineProperty(prototype, '__rippleTraced', { value: true });
+  };
+  wrap(globalThis.WebGLRenderingContext?.prototype);
+  wrap(globalThis.WebGL2RenderingContext?.prototype);
+})();`;
+
+function finaleRiseCount(trace) {
+  let previous = 0;
+  let count = 0;
+  for (const sample of trace ?? []) {
+    const value = Number(sample.value ?? 0);
+    if (previous < 0.35 && value >= 0.45 && value <= 0.55) count += 1;
+    previous = value;
+  }
+  return count;
+}
+
+async function scrollWholeDocument(cdp) {
+  return cdp.evaluate(`(async () => {
+    const pause = () => new Promise((resolve) => setTimeout(resolve, 45));
+    const step = Math.max(120, Math.round(innerHeight * 0.55));
+    const max = Math.max(0, document.documentElement.scrollHeight - innerHeight);
+    for (let y = 0; y <= max; y += step) {
+      scrollTo(0, Math.min(max, y));
+      await pause();
+    }
+    scrollTo(0, max);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return {
+      scrollY,
+      max,
+      armed: document.querySelectorAll('.reveal--armed:not(.in)').length,
+      totalArmed: document.querySelectorAll('.reveal--armed').length,
+    };
+  })()`);
+}
+
 async function waitForIdleHint(cdp, timeoutMs = 5000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -437,6 +496,144 @@ async function runIdleRegression(origin, results) {
     assert(!after.hintVisible && !after.tipVisible && after.linked === 0 && !after.guideActive,
       'A normal CTA press left part of the idle demonstration active.');
     results.push({ id: 'BROWSER-IDLE-CANCEL', status: 'PASS', details: { before, after } });
+  } finally {
+    await browser.close();
+  }
+}
+
+async function runRevealRegressions(origin, results) {
+  const browser = await launchChrome();
+  const { cdp } = browser;
+  const matrix = [];
+  try {
+    for (const viewport of [
+      { width: 1440, height: 900, mobile: false },
+      { width: 390, height: 844, mobile: true },
+      { width: 844, height: 390, mobile: true },
+      { width: 412, height: 915, mobile: true },
+    ]) {
+      await setViewport(cdp, viewport.width, viewport.height, viewport.mobile);
+      await cdp.navigate(`${origin}${basePath}`);
+      const traversal = await scrollWholeDocument(cdp);
+      assert(traversal.armed === 0,
+        `${viewport.width}x${viewport.height} full-page traversal left ${traversal.armed} reveal(s) armed.`);
+      matrix.push({ ...viewport, ...traversal });
+    }
+
+    /* F7-B/D: make an already-armed ordinary element only ~10% visible, then
+       grow it until 15% can no longer fit inside the effective viewport. The
+       ResizeObserver must release it without any further scroll event. */
+    await setViewport(cdp, 1440, 900, false);
+    await cdp.navigate(`${origin}${basePath}`);
+    const oversizedBefore = await cdp.evaluate(`(async () => {
+      const element = document.querySelector('.service.reveal--armed') ?? document.querySelector('.reveal--armed');
+      if (!element) return null;
+      const absoluteTop = element.getBoundingClientRect().top + scrollY;
+      const rootBottom = innerHeight * 0.92;
+      scrollTo(0, Math.max(0, absoluteTop - (rootBottom - Math.max(12, element.getBoundingClientRect().height * 0.1))));
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const rect = element.getBoundingClientRect();
+      return {
+        selector: element.className,
+        armed: element.classList.contains('reveal--armed'),
+        in: element.classList.contains('in'),
+        top: rect.top,
+        height: rect.height,
+        visible: Math.max(0, Math.min(rect.bottom, rootBottom) - Math.max(rect.top, 0)),
+      };
+    })()`);
+    assert(oversizedBefore?.armed && !oversizedBefore.in && oversizedBefore.visible > 0,
+      `Oversized reveal setup never produced a visible sub-threshold armed element: ${JSON.stringify(oversizedBefore)}`);
+    const oversizedAfter = await cdp.evaluate(`(async () => {
+      const element = document.querySelector('.service.reveal--armed') ?? document.querySelector('.reveal--armed');
+      if (!element) return null;
+      element.style.height = '7000px';
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      const rect = element.getBoundingClientRect();
+      return {
+        armed: element.classList.contains('reveal--armed'),
+        in: element.classList.contains('in'),
+        height: rect.height,
+        maxRatio: (Math.min(rect.width, innerWidth) * Math.min(rect.height, innerHeight * 0.92)) / (rect.width * rect.height),
+      };
+    })()`);
+    assert(oversizedAfter?.in && oversizedAfter.maxRatio < 0.15,
+      `An element whose 15% threshold became impossible stayed armed: ${JSON.stringify(oversizedAfter)}`);
+
+    /* F7-C: viewport resize after arming can make an element newly visible. */
+    await setViewport(cdp, 1440, 600, false);
+    await cdp.navigate(`${origin}${basePath}`);
+    const resizeBefore = await cdp.evaluate(`(async () => {
+      const element = document.querySelector('.service.reveal--armed') ?? document.querySelector('.reveal--armed');
+      if (!element) return null;
+      const absoluteTop = element.getBoundingClientRect().top + scrollY;
+      scrollTo(0, Math.max(0, absoluteTop - 650));
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      return { armed: element.classList.contains('reveal--armed'), in: element.classList.contains('in'), top: element.getBoundingClientRect().top };
+    })()`);
+    assert(resizeBefore?.armed && !resizeBefore.in && resizeBefore.top > 600 * 0.92,
+      `Resize reveal setup was already released: ${JSON.stringify(resizeBefore)}`);
+    await setViewport(cdp, 1440, 900, false);
+    const resizeAfter = await cdp.evaluate(`(async () => {
+      const element = document.querySelector('.service.reveal--armed, .service.in') ?? document.querySelector('.reveal--armed, .reveal.in');
+      if (!element) return null;
+      if (!element.classList.contains('in')) {
+        const absoluteTop = element.getBoundingClientRect().top + scrollY;
+        scrollTo(0, Math.max(0, absoluteTop - 650));
+        await new Promise((resolve) => setTimeout(resolve, 350));
+      }
+      return { armed: element.classList.contains('reveal--armed'), in: element.classList.contains('in'), top: element.getBoundingClientRect().top };
+    })()`);
+    assert(resizeAfter?.in, `A viewport resize left a newly visible reveal stuck: ${JSON.stringify(resizeAfter)}`);
+
+    results.push({ id: 'BROWSER-REVEAL-LIVENESS', status: 'PASS', details: { matrix, oversizedBefore, oversizedAfter, resizeBefore, resizeAfter } });
+  } finally {
+    await browser.close();
+  }
+}
+
+async function runFinaleBrowserRegression(origin, results) {
+  const browser = await launchChrome();
+  const { cdp } = browser;
+  try {
+    await setViewport(cdp, 1440, 900, false);
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: rippleTraceSource });
+
+    await cdp.navigate(`${origin}${basePath}#contact`);
+    await sleep(2400);
+    const direct = await cdp.evaluate(`(() => ({
+      hash: location.hash,
+      scrollY,
+      trace: window.__rippleTrace ?? [],
+      contactTop: document.getElementById('contact')?.getBoundingClientRect().top,
+    }))()`);
+    const directFinales = finaleRiseCount(direct.trace);
+    assert(direct.hash === '#contact' && direct.scrollY > 0, 'Direct #contact regression did not actually arrive at contact.');
+    assert(directFinales === 0, `Direct #contact produced a finale-shaped uRipple rise: ${JSON.stringify(direct.trace)}`);
+
+    await cdp.navigate(`${origin}${basePath}`);
+    await sleep(2200);
+    await cdp.evaluate('window.__clearRippleTrace?.()');
+    await cdp.evaluate(`document.getElementById('contact')?.scrollIntoView({block:'center'})`);
+    await sleep(2200);
+    const normalTrace = await cdp.evaluate('window.__rippleTrace ?? []');
+    const normalFinales = finaleRiseCount(normalTrace);
+    assert(normalFinales === 1, `Normal traversal to contact did not produce exactly one finale rise: ${JSON.stringify(normalTrace)}`);
+
+    await cdp.evaluate(`document.getElementById('skills')?.scrollIntoView({block:'center'})`);
+    await sleep(900);
+    await cdp.evaluate('window.__clearRippleTrace?.()');
+    await cdp.evaluate(`document.getElementById('contact')?.scrollIntoView({block:'center'})`);
+    await sleep(2200);
+    const returnTrace = await cdp.evaluate('window.__rippleTrace ?? []');
+    const returnFinales = finaleRiseCount(returnTrace);
+    assert(returnFinales === 1, `A genuine leave/return did not re-arm exactly one finale rise: ${JSON.stringify(returnTrace)}`);
+
+    results.push({ id: 'BROWSER-FINALE-TRAVERSAL', status: 'PASS', details: {
+      direct: { hash: direct.hash, scrollY: direct.scrollY, contactTop: direct.contactTop, finaleRises: directFinales },
+      normalFinales,
+      returnFinales,
+    } });
   } finally {
     await browser.close();
   }
@@ -556,6 +753,7 @@ async function runPrimary(origin, results) {
     for (const viewport of [
       { id: 'BROWSER-TABLET', width: 768, height: 1024, mobile: true, screenshot: 'tablet-768x1024.png' },
       { id: 'BROWSER-MOBILE', width: 390, height: 844, mobile: true, screenshot: 'mobile-390x844.png' },
+      { id: 'BROWSER-TALL-MOBILE', width: 412, height: 915, mobile: true, screenshot: 'mobile-412x915.png' },
       { id: 'BROWSER-LANDSCAPE', width: 844, height: 390, mobile: true, screenshot: 'landscape-844x390.png' },
     ]) {
       await setViewport(cdp, viewport.width, viewport.height, viewport.mobile);
@@ -626,32 +824,109 @@ async function runPrimary(origin, results) {
     const skipHash = await cdp.evaluate('location.hash');
     assert(skipHash === '#content', 'Skip link did not target main content.');
 
-    await cdp.evaluate(`document.querySelector('[data-project]')?.focus()`);
+    const sourceProject = await cdp.evaluate(`(() => {
+      const card = document.querySelector('[data-project]');
+      card?.focus();
+      return card?.getAttribute('data-project');
+    })()`);
+    assert(sourceProject, 'Keyboard case test found no source project card.');
     await cdp.key('Enter', 'Enter');
     const dialogOpen = await cdp.evaluate(`(() => ({
       open: document.getElementById('case')?.getAttribute('aria-hidden') === 'false',
+      inert: document.getElementById('case')?.inert,
       focus: document.activeElement?.id,
       mainInert: document.getElementById('content')?.inert,
       labelledBy: document.getElementById('case-panel')?.getAttribute('aria-labelledby'),
     }))()`);
-    assert(dialogOpen.open && dialogOpen.focus === 'case-close' && dialogOpen.mainInert && dialogOpen.labelledBy === 'case-title', 'Dialog focus/inert/name contract failed.');
+    assert(dialogOpen.open && !dialogOpen.inert && dialogOpen.focus === 'case-close' && dialogOpen.mainInert && dialogOpen.labelledBy === 'case-title', 'Dialog focus/inert/name contract failed.');
     const shared = await cdp.evaluate(`(() => ({
       travelling: document.getElementById('case-panel').getAnimations().map((a) => Math.round(Number(a.effect.getComputedTiming().duration))),
       sourceCards: document.querySelectorAll('.is-case-source').length,
     }))()`);
     assert(shared.travelling.includes(520) && shared.sourceCards === 1, `The case did not grow out of the card that opened it: ${JSON.stringify(shared)}`);
-    await cdp.key('Escape', 'Escape');
-    /* the case is over on the keystroke; the panel shrinking back is a ghost */
-    const dialogClosed = await cdp.evaluate(`(() => ({ closed: document.getElementById('case')?.getAttribute('aria-hidden') === 'true', restored: document.activeElement?.hasAttribute('data-project'), mainInert: document.getElementById('content')?.inert }))()`);
-    assert(dialogClosed.closed && dialogClosed.restored && !dialogClosed.mainInert, 'Dialog close did not restore focus/background state.');
+
+    await cdp.key('Escape', 'Escape', 0, 20);
+    const dialogClosed = await cdp.evaluate(`(() => ({
+      closed: document.getElementById('case')?.getAttribute('aria-hidden') === 'true',
+      inert: document.getElementById('case')?.inert,
+      closing: document.getElementById('case')?.classList.contains('case--closing'),
+      restoredProject: document.activeElement?.getAttribute('data-project'),
+      mainInert: document.getElementById('content')?.inert,
+    }))()`);
+    assert(dialogClosed.closed && dialogClosed.inert && dialogClosed.closing
+      && dialogClosed.restoredProject === sourceProject && !dialogClosed.mainInert,
+    `Dialog logical close did not restore source focus/semantics before its ghost: ${JSON.stringify(dialogClosed)}`);
+    const ghostTraversal = [];
+    for (let index = 0; index < 6; index += 1) {
+      await cdp.key('Tab', 'Tab', 0, 20);
+      const state = await cdp.evaluate(`(() => ({
+        focus: document.activeElement?.id || document.activeElement?.getAttribute('data-project') || document.activeElement?.tagName,
+        insideCase: Boolean(document.activeElement?.closest('#case')),
+        hidden: document.getElementById('case')?.getAttribute('aria-hidden') === 'true',
+        inert: document.getElementById('case')?.inert,
+        closing: document.getElementById('case')?.classList.contains('case--closing'),
+      }))()`);
+      ghostTraversal.push(state);
+      assert(!(state.hidden && state.insideCase), `Tab entered aria-hidden closing case ghost: ${JSON.stringify(state)}`);
+    }
+    assert(ghostTraversal.some((state) => state.closing), 'Ghost focus traversal missed the reverse-FLIP interval it was meant to test.');
+
+    /* Keep the rapid reopen race independent from the focus-traversal probe: Tab
+       is allowed to scroll the page, and an offscreen source intentionally skips
+       the FLIP/source-card ghost. Restore an on-screen source, open, close, and
+       reopen before that 380ms reverse animation can finish. */
+    await sleep(500);
+    await cdp.evaluate(`document.querySelector('[data-project="${sourceProject}"]')?.scrollIntoView({block:'center'})`);
+    await sleep(120);
+    await cdp.evaluate(`document.querySelector('[data-project="${sourceProject}"]')?.click()`);
+    await cdp.key('Escape', 'Escape', 0, 20);
+    const rapidReopen = await cdp.evaluate(`(() => {
+      document.querySelector('[data-project="${sourceProject}"]')?.click();
+      const overlay = document.getElementById('case');
+      return {
+        open: overlay?.classList.contains('case--open'),
+        closing: overlay?.classList.contains('case--closing'),
+        hidden: overlay?.getAttribute('aria-hidden'),
+        inert: overlay?.inert,
+        focus: document.activeElement?.id,
+        sourceCards: document.querySelectorAll('.is-case-source').length,
+      };
+    })()`);
+    assert(rapidReopen.open && !rapidReopen.closing && rapidReopen.hidden === 'false' && !rapidReopen.inert
+      && rapidReopen.focus === 'case-close' && rapidReopen.sourceCards === 1,
+    `Rapid case reopen corrupted lifecycle state: ${JSON.stringify(rapidReopen)}`);
+    await cdp.key('Escape', 'Escape', 0, 20);
     await sleep(700);
     const dialogSettled = await cdp.evaluate(`(() => ({
       open: document.getElementById('case').classList.contains('case--open'),
       closing: document.getElementById('case').classList.contains('case--closing'),
+      inert: document.getElementById('case').inert,
       sourceCards: document.querySelectorAll('.is-case-source').length,
     }))()`);
-    assert(!dialogSettled.open && !dialogSettled.closing && dialogSettled.sourceCards === 0, 'The closed case left its ghost or its card behind.');
-    results.push({ id: 'BROWSER-KEYBOARD-DIALOG', status: 'PASS', details: { firstFocus, focusOutline, dialogOpen, shared, dialogClosed, dialogSettled } });
+    assert(!dialogSettled.open && !dialogSettled.closing && dialogSettled.inert && dialogSettled.sourceCards === 0,
+      'The closed case left its ghost/card/semantic state behind.');
+
+    const sceneStyleOpen = await cdp.evaluate(`(() => {
+      document.getElementById('footer-top')?.focus({ preventScroll: true });
+      const before = document.activeElement?.id;
+      document.querySelector('[data-project="${sourceProject}"]')?.click();
+      return { before, focus: document.activeElement?.id, open: document.getElementById('case')?.classList.contains('case--open') };
+    })()`);
+    assert(sceneStyleOpen.before === 'footer-top' && sceneStyleOpen.open && sceneStyleOpen.focus === 'case-close',
+      `Scene-style target.click() did not open the project case from an unrelated focus owner: ${JSON.stringify(sceneStyleOpen)}`);
+    await cdp.key('Escape', 'Escape', 0, 20);
+    const sceneStyleClose = await cdp.evaluate(`(() => ({
+      focusProject: document.activeElement?.getAttribute('data-project'),
+      hidden: document.getElementById('case')?.getAttribute('aria-hidden'),
+      inert: document.getElementById('case')?.inert,
+    }))()`);
+    assert(sceneStyleClose.focusProject === sourceProject && sceneStyleClose.hidden === 'true' && sceneStyleClose.inert,
+      `Scene-open case restored focus to the stale control instead of its source project: ${JSON.stringify(sceneStyleClose)}`);
+    await sleep(700);
+
+    results.push({ id: 'BROWSER-KEYBOARD-DIALOG', status: 'PASS', details: {
+      firstFocus, focusOutline, sourceProject, dialogOpen, shared, dialogClosed, ghostTraversal, rapidReopen, dialogSettled, sceneStyleOpen, sceneStyleClose,
+    } });
 
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: drawCounterSource });
     await cdp.send('Emulation.setEmulatedMedia', { media: '', features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
@@ -666,6 +941,22 @@ async function runPrimary(origin, results) {
     assert(reduced.matches && reduced.ready && reduced.revealOpacity === '1', 'Reduced-motion contract failed.');
     assert(reduced.drawCalls > 0, 'Reduced-motion draw-call instrumentation did not observe the static render.');
 
+    /* F1-C: native scroll changes legitimate static scene state under RM. It
+       must trigger a bounded redraw and then go quiet instead of starting the
+       continuous animation loop. */
+    const drawsBeforeScroll = await cdp.evaluate('window.__sceneDrawCalls');
+    await cdp.evaluate('window.scrollTo(0, 180)');
+    await sleep(160);
+    const drawsAfterScroll = await cdp.evaluate('window.__sceneDrawCalls');
+    assert(drawsAfterScroll > drawsBeforeScroll,
+      `Reduced-motion scroll changed state without drawing a new frame (${drawsBeforeScroll} -> ${drawsAfterScroll}).`);
+    await sleep(360);
+    const drawsAfterScrollSettled = await cdp.evaluate('window.__sceneDrawCalls');
+    assert(drawsAfterScrollSettled === drawsAfterScroll,
+      `Reduced-motion scroll started a continuous draw loop (${drawsAfterScroll} -> ${drawsAfterScrollSettled}).`);
+    await cdp.evaluate('window.scrollTo(0, 0)');
+    await sleep(180);
+
     /* A case opened by pointer must still hand focus to the dialog: with every
        property transitioned, the overlay is unfocusable on the frame it opens. */
     const reducedCase = await cdp.evaluate(`(() => {
@@ -679,6 +970,10 @@ async function runPrimary(origin, results) {
     assert(reducedCase.open && reducedCase.focus === 'case-close' && reducedCase.overlayVisibility === 'visible',
       `A case opened under reduced motion left focus behind: ${JSON.stringify(reducedCase)}`);
     await cdp.key('Escape', 'Escape');
+    // Correct focus restoration may scroll an offscreen source card into view;
+    // the hover idempotency probe is specifically a hero/static-formation test.
+    await cdp.evaluate(`document.getElementById('hero')?.scrollIntoView({block:'start'})`);
+    await sleep(260);
 
     const reducedLabel = await cdp.evaluate(`document.querySelector('[data-scene-target^="stack-"]')?.textContent?.trim()`);
     const reducedNode = await discoverSceneNodes(cdp, 1440, 900, [reducedLabel]);
@@ -699,7 +994,9 @@ async function runPrimary(origin, results) {
     assert(repeatedMove.drawCalls === drawsBeforeRepeatedMove, 'Reduced-motion rendered a full WebGL frame for unchanged hover pointer moves.');
 
     await cdp.screenshot(resolve(artifactDir, 'reduced-motion.png'));
-    results.push({ id: 'BROWSER-REDUCED-MOTION', status: 'PASS', details: { ...reduced, reducedLabel, drawsBeforeRepeatedMove, repeatedMove } });
+    results.push({ id: 'BROWSER-REDUCED-MOTION', status: 'PASS', details: {
+      ...reduced, drawsBeforeScroll, drawsAfterScroll, drawsAfterScrollSettled, reducedLabel, drawsBeforeRepeatedMove, repeatedMove,
+    } });
     await cdp.send('Emulation.setEmulatedMedia', { media: '', features: [] });
 
     await cdp.navigate(`${origin}${basePath}`);
@@ -875,6 +1172,8 @@ let failure;
 try {
   await runIdleRegression(origin, results);
   await runPrimary(origin, results);
+  await runRevealRegressions(origin, results);
+  await runFinaleBrowserRegression(origin, results);
   await runHeroWithoutRuntime(origin, results);
   await runFallback(origin, results);
   await runNoJs(origin, results);

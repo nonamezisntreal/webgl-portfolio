@@ -2,14 +2,17 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 const root = resolve(process.env.PROJECT_ROOT ?? process.cwd());
-const [particles, rings, core, postFx, experience, nodes, motion, sceneNodes, sceneNav, intro, scroll, projects, reveal, render, styles, indexHtml] = await Promise.all([
+const [particles, rings, core, postFx, experience, nodes, motion, tilt, interactions, cursor, sceneNodes, sceneNav, intro, scroll, projects, reveal, render, styles, indexHtml] = await Promise.all([
   readFile(resolve(root, 'src/webgl/Particles.ts'), 'utf8'),
   readFile(resolve(root, 'src/webgl/Rings.ts'), 'utf8'),
   readFile(resolve(root, 'src/webgl/Core.ts'), 'utf8'),
   readFile(resolve(root, 'src/webgl/PostFX.ts'), 'utf8'),
   readFile(resolve(root, 'src/webgl/Experience.ts'), 'utf8'),
   readFile(resolve(root, 'src/webgl/Nodes.ts'), 'utf8'),
-  readFile(resolve(root, 'src/webgl/motion.ts'), 'utf8'),
+  readFile(resolve(root, 'src/motion.ts'), 'utf8'),
+  readFile(resolve(root, 'src/ui/tilt.ts'), 'utf8'),
+  readFile(resolve(root, 'src/ui/interactions.ts'), 'utf8'),
+  readFile(resolve(root, 'src/ui/cursor.ts'), 'utf8'),
   readFile(resolve(root, 'src/scene-nodes.ts'), 'utf8'),
   readFile(resolve(root, 'src/ui/sceneNav.ts'), 'utf8'),
   readFile(resolve(root, 'src/ui/intro.ts'), 'utf8'),
@@ -56,26 +59,17 @@ for (const formation of formations) {
 assert(/worldPosition\(/u.test(nodes), 'Node world positions must stay resolvable for picking and focus.');
 assert(/scene\.nodes\.length > this\.states\.length/u.test(nodes), 'Node capacity overflow must fail closed.');
 assert(!/scene\.nodes\.slice\(/u.test(nodes), 'Scene nodes must not be silently truncated.');
-assert(/update\(time: number, delta: number, scroll: number, immediate = false\)/u.test(nodes), 'Reduced-motion nodes need an immediate static update path.');
+assert(/renderStatic\(time: number, scroll: number\): void/u.test(nodes), 'Reduced-motion nodes need an explicit static render path.');
 
-/* Each section assembles in an order taken from its own geometry, and a static
-   render must land on the finished shape rather than part-way through it. */
-assert(/function arrivalOrder\(formation: Formation/u.test(nodes), 'Formations lost the assembly order that gives each section its own gathering.');
-assert(/case 'pillars':\s*case 'ring':\s*case 'spiral':\s*return t;/u.test(nodes), 'Ordered formations must assemble along their own index.');
-assert(/case 'lattice':\s*return 1 - weight;/u.test(nodes), 'The lattice must land its strongest node first.');
-assert(/state\.order = arrivalOrder\(scene\.formation/u.test(nodes), 'Section changes must re-derive the assembly order.');
-assert(/state\.origin\.copy\(state\.current\);\s*state\.originScale = state\.targetScale;\s*state\.travel = 0;/u.test(nodes), 'An interrupted re-formation must set out from where the nodes actually stand, at the size they stand at.');
-assert(/state\.travel = 1;\s*state\.current\.copy\(state\.target\)/u.test(nodes), 'A static render must complete the re-formation instead of freezing it mid-flight.');
-assert(/\(state\.travel - state\.order \* REFORM_STAGGER\) \/ \(1 - REFORM_STAGGER\)/u.test(nodes), 'The stagger must delay a node rather than shorten how long it moves.');
-assert(/size = THREE\.MathUtils\.lerp\(state\.originScale, state\.targetScale, eased\)/u.test(nodes), 'A node leaving a section must be carried home rather than fade out where it stands.');
-assert(/get settled\(\): boolean/u.test(nodes), 'The scene must be able to say when a formation has finished gathering.');
-
-/* The page ends on a beat, and that beat is a per-frame decay like every other. */
-assert(/this\.closing = name === 'contact'/u.test(experience), 'The last section no longer arms the closing beat.');
-assert(/if \(name !== this\.section\) this\.closed = false;/u.test(experience), 'Leaving and returning to the end must re-arm the closing beat exactly once.');
-assert(/if \(!this\.closing \|\| this\.closed \|\| !this\.nodes\.settled\) return;/u.test(experience), 'The ending must wait for the constellation to gather, and must not repeat.');
-assert(/private finale\(\): void \{\s*if \(this\.disposed \|\| this\.contextLost \|\| this\.reducedMotion\) return;/u.test(experience), 'Reduced motion must not fire the closing decay it renders no frames for.');
-assert(/this\.closeIfSettled\(\);/u.test(experience), 'The frame loop no longer checks for the ending.');
+/* Structural pins only: behavioral assembly/static/finale semantics are executed
+   in test-scene-runtime.ts instead of inferred from one matching source line. */
+assert(/function arrivalOrder\(formation: Formation/u.test(nodes), 'Formations lost the geometry-derived assembly order.');
+assert(/case 'pillars':\s*case 'ring':\s*case 'spiral':\s*return t;/u.test(nodes), 'Ordered formations no longer expose their geometry-specific order.');
+assert(/case 'lattice':\s*return 1 - weight;/u.test(nodes), 'The lattice no longer derives order from node weight.');
+assert(/\bassemblyScale\b/u.test(nodes), 'Formation geometry needs a base scale distinct from rendered effects.');
+assert(/get settled\(\): boolean/u.test(nodes), 'The scene must be able to report formation settlement.');
+assert(/private closeIfSettled\(\): void/u.test(experience) && /private finale\(\): void/u.test(experience),
+  'The scene ending lifecycle is missing; its exact semantics are runtime-tested.');
 
 assert(/from '\.\/content'/u.test(sceneNodes), 'Scene node registry must derive its labels from the content registry.');
 assert(/data-scene-target/u.test(sceneNodes) && !/nth-child/u.test(sceneNodes), 'Scene targets must use stable identifiers rather than positional selectors.');
@@ -91,7 +85,7 @@ assert(/isBlockedTarget\(/u.test(experience) && /this\.isBlockedPoint\(\)/u.test
 assert(/window\.addEventListener\('pointerup'/u.test(experience) && /private onPointerUp\(event: PointerEvent\)/u.test(experience), 'Scene activation must be committed on pointerup.');
 assert(/TAP_SLOP/u.test(experience) && /pointerDragged/u.test(experience), 'Scene activation must distinguish taps from scroll or drag gestures.');
 assert(/this\.elapsedTime \+= delta/u.test(experience), 'Scene time must remain monotonic across visibility pause/resume.');
-assert(/this\.nodes\.update\(time, delta, this\.scroll, true\)/u.test(experience), 'Reduced motion must render nodes directly in their static final state.');
+assert(/this\.nodes\.renderStatic\(STATIC_TIME, this\.scroll\)/u.test(experience), 'Reduced motion must use the explicit static node path.');
 assert(/impactRay\.intersectPlane/u.test(experience), 'Shockwave direction must derive from the clicked side of the core.');
 
 const shockwaveParts = [
@@ -116,21 +110,34 @@ assert(/this\.core\.update\(time, delta/u.test(experience)
   && /this\.rings\.update\(time, delta/u.test(experience)
   && /this\.postfx\.render\(time, delta\)/u.test(experience), 'Experience must supply one shared frame delta to every transient effect.');
 
-/* Every smoothing is a rate per second, so the display cannot decide the feel. */
-assert(/export function approach\(rate: number, delta: number\): number/u.test(motion), 'The shared frame-rate independent smoothing is missing.');
-assert(/1 - Math\.exp\(-rate \* delta\)/u.test(motion), 'Smoothing must fall off with elapsed time rather than with frames.');
-for (const [label, source] of [['Experience.ts', experience], ['Core.ts', core], ['Nodes.ts', nodes], ['PostFX.ts', postFx], ['Particles.ts', particles]]) {
-  assert(/approach\([A-Z_]+_RATE, delta\)/u.test(source), `${label} still smooths by a per-frame factor.`);
+/* Structural tripwires only. 30/60/120Hz equivalence and static idempotency are
+   executed by test-scene-runtime.ts; this file merely prevents easy regressions
+   back to a duplicate helper or a fixed rAF lerp. */
+assert(/export function approach\(rate: number, delta: number\): number/u.test(motion)
+  && /Math\.exp\(-rate \* Math\.max\(0, delta\)\)/u.test(motion),
+'Shared elapsed-time exponential smoothing is missing.');
+assert(/export function frameDelta\(/u.test(motion), 'UI rAF loops lost the shared elapsed-time delta helper.');
+for (const [label, source] of [['tilt.ts', tilt], ['interactions.ts', interactions], ['cursor.ts', cursor]]) {
+  assert(/frameDelta\(/u.test(source) && /approach\(UI_[A-Z_]+_RATE, delta\)/u.test(source),
+    `${label} must use the shared elapsed-time smoothing helper.`);
+  assert(!/\+=\s*\([^;\n]+\)\s*\*\s*0\.(?:12|16)\b/u.test(source), `${label} reintroduced a fixed per-frame lerp factor.`);
 }
-assert(/const drifting = immediate \? 0 : delta;/u.test(rings), 'A lone static render must not accumulate the ring drift.');
-assert(/const delta = SETTLE_STEP;/u.test(experience), 'The static render must settle the scene rather than step it once.');
+assert(!/\bSETTLE_STEP\b/u.test(experience), 'Static rendering must not be implemented as a finite temporal settle step.');
+assert(/this\.core\.renderStatic\(/u.test(experience)
+  && /this\.particles\.renderStatic\(/u.test(experience)
+  && /this\.rings\.renderStatic\(/u.test(experience)
+  && /this\.nodes\.renderStatic\(/u.test(experience)
+  && /this\.postfx\.renderStatic\(/u.test(experience),
+'Experience reduced-motion rendering must use explicit static component paths.');
 
 /* Reveals: the stylesheet must not be able to hide content on its own, and
    every section must reveal the same way. */
 assert(!/\.reveal\s*\{[^}]*opacity:\s*0/u.test(styles), 'The stylesheet hides content the runtime may never arrive to unhide.');
 assert(/\.reveal--armed \{[^}]*opacity: 0;/u.test(styles) && /\.reveal--armed\.in \{/u.test(styles), 'The armed reveal state is missing.');
 assert(/element\.classList\.add\('reveal--armed'\)/u.test(reveal), 'The runtime must be the thing that holds content back.');
-assert(/if \(element\.getBoundingClientRect\(\)\.top < window\.innerHeight\) continue;/u.test(reveal), 'Content already on screen must not be taken away to be brought back.');
+assert(/REVEAL_THRESHOLD = 0\.15/u.test(reveal) && /rootMargin: '0px 0px -8% 0px'/u.test(reveal),
+  'Reveal tuning changed: normal elements keep the 15% threshold and 8% bottom exclusion.');
+assert(/ResizeObserver/u.test(reveal), 'Dynamic reveal geometry needs a resize liveness hook; behavior is browser-tested.');
 assert(!/reveal in/u.test(render), 'Runtime-rendered cards must reveal like the rest of the page, not arrive already revealed.');
 assert(/data-rv/u.test(render), 'Runtime-rendered cards must still opt into the reveal.');
 
@@ -145,7 +152,7 @@ assert(/setAttribute\('aria-hidden', 'true'\)/u.test(sceneNav), 'Scene node labe
 
 assert(/setPull\(point: THREE\.Vector3 \| null\): void/u.test(nodes), 'A hovered node must be able to reach toward the pointer.');
 assert(/this\.attention/u.test(nodes), 'Nodes must recede while one of them holds attention.');
-assert(/const reaching = this\.pulling && !immediate/u.test(nodes), 'The pointer reach is a per-frame offset and must stay out of the static render.');
+assert(/const reaching = this\.pulling && !staticFrame/u.test(nodes), 'The pointer reach is temporal and must stay out of the static render.');
 assert(/setDomHover\(id: string \| null\): void/u.test(experience), 'Hovering a card must light up the node that stands for it.');
 assert(/if \(this\.domHoverIndex >= 0\) return false;/u.test(experience), 'Scene picking must yield to the card under the pointer.');
 assert(/if \(this\.domHoverIndex >= 0\) return;/u.test(experience), 'A hovered card must own its own activation gesture.');
@@ -205,10 +212,13 @@ assert(/is-case-source/u.test(projects) && /panel\.animate\(/u.test(projects),
   'A case must grow out of the card that opened it, and that card must step aside while it does.');
 assert(/if \(reducedMotion \|\| !card\) return null;/u.test(projects),
   'Reduced motion must open the case where it stands instead of flying it in.');
-assert(/const close = \(\) => \{[\s\S]*?setBackgroundInert\(false\);[\s\S]*?lastFocused\?\.focus\(\);[\s\S]*?case--closing/u.test(projects),
-  'Closing must hand the page back before the panel animates out: the outro is a ghost, not a gate.');
+assert(/overlay\.inert = true/u.test(projects) && /overlay\.inert = false/u.test(projects),
+  'The visual case ghost must leave and re-enter the semantic focus tree explicitly.');
+assert(/restoreFocus\(\)/u.test(projects) && /canRestoreFocus\(source\)/u.test(projects),
+  'Case focus restoration must prefer its logical source card with a safe fallback.');
 assert(/\.case--closing \{ visibility: visible; pointer-events: none; \}/u.test(styles),
   'The outro must stay visible without catching pointers meant for the page behind it.');
+assert(/id="case" aria-hidden="true" inert/u.test(indexHtml), 'The initially hidden case must also start inert.');
 assert(/\.case \{ transition-property: none !important; \}/u.test(styles),
   'Under reduced motion every property is transitioned, visibility included, which leaves the case unfocusable as it opens.');
 
