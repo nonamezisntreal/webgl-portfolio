@@ -490,6 +490,24 @@ async function runPrimary(origin, results) {
     const activeRuClick = await activeLocaleClickKeepsPath(cdp);
     assert(activeRuClick.before === basePath && activeRuClick.after === basePath, 'Clicking active RU unexpectedly changed the URL.');
     assert(desktop.contactStatusRole === 'status', 'Contact feedback is not a live status region.');
+    /* Every section reveals the same way, including the cards the runtime
+       renders — and only what is still below the fold is held back. */
+    const reveals = await cdp.evaluate(`(() => {
+      const state = (selector) => {
+        const el = document.querySelector(selector);
+        if (!el) return null;
+        return { armed: el.classList.contains('reveal--armed'), opacity: Number(getComputedStyle(el).opacity) };
+      };
+      return { hero: state('.hero__line'), service: state('.service'), project: state('.project'), skill: state('.skill'), step: state('.step') };
+    })()`);
+    for (const [name, state] of Object.entries(reveals)) {
+      assert(state !== null, `The reveal contract could not find a ${name}.`);
+      if (name === 'hero') {
+        assert(!state.armed && state.opacity === 1, `The hero was held back instead of arriving open: ${JSON.stringify(state)}`);
+      } else {
+        assert(state.armed && state.opacity === 0, `A ${name} below the fold arrived already revealed: ${JSON.stringify(state)}`);
+      }
+    }
     const ruDiagnostics = diagnostics.snapshotAndReset();
     assert(ruDiagnostics.consoleErrors.length === 0 && ruDiagnostics.networkFailures.length === 0, 'Russian direct load produced Console or Network failures.');
     await cdp.screenshot(resolve(artifactDir, 'desktop-1440x900.png'));
@@ -776,12 +794,20 @@ async function runHeroWithoutRuntime(origin, results) {
         taglineOpacity: Number(read('.hero__tagline', 'opacity')),
         actionsOpacity: Number(read('.hero__actions', 'opacity')),
         ctaReachable: hit !== null && hit.closest('#hero-primary') !== null,
+        // the page past the hero is held back by the runtime, so a blocked
+        // bundle must leave it readable rather than blank
+        aboutHeadOpacity: Number(read('#about .section__head', 'opacity')),
+        aboutCardOpacity: Number(read('.about__card', 'opacity')),
+        contactOpacity: Number(read('.contact__info', 'opacity')),
+        armed: document.querySelectorAll('.reveal--armed').length,
       };
     })()`);
     assert(!hero.runtimeRan, 'The runtime was expected to stay blocked for this contract.');
     assert(hero.headingLength > 0 && hero.lineOpacity === 1 && !hero.lineClip.includes('100%')
       && hero.taglineOpacity === 1 && hero.actionsOpacity === 1 && hero.ctaReachable,
       `The hero did not open on its own without the runtime: ${JSON.stringify(hero)}`);
+    assert(hero.armed === 0 && hero.aboutHeadOpacity === 1 && hero.aboutCardOpacity === 1 && hero.contactOpacity === 1,
+      `The page below the hero stayed hidden without the runtime: ${JSON.stringify(hero)}`);
     await cdp.screenshot(resolve(artifactDir, 'hero-without-runtime.png'));
     results.push({ id: 'BROWSER-HERO-WITHOUT-RUNTIME', status: 'PASS', details: hero });
   } finally {

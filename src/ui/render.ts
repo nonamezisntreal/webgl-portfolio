@@ -43,7 +43,7 @@ function renderServices(locale: Locale): void {
     .services.map((service, index) => {
       const text = index === 1 ? publicClaims.webglServiceSummary[locale] : service.text;
       return `
-  <div class="service reveal in" data-rv data-tilt data-scene-target="service-${index}" style="--i:${index + 1}">
+  <div class="service reveal" data-rv data-tilt data-scene-target="service-${index}" style="--i:${index + 1}">
     <span class="service__icon" aria-hidden="true">${service.icon}</span>
     <h3 class="service__title">${service.title}</h3>
     <p class="service__text">${text}</p>
@@ -58,7 +58,7 @@ function renderProcess(locale: Locale): void {
   host.innerHTML = getCopy(locale)
     .process.map(
       (process, index) => `
-  <div class="step reveal in" data-rv data-scene-target="process-${index}" style="--i:${index + 1}">
+  <div class="step reveal" data-rv data-scene-target="process-${index}" style="--i:${index + 1}">
     <span class="step__num">${process.num}</span>
     <h3 class="step__title">${process.title}</h3>
     <p class="step__text">${process.text}</p>
@@ -90,7 +90,7 @@ function renderProjects(locale: Locale): void {
 
 function projectCard(project: Project, index: number, openLabel: string): string {
   return `
-  <article class="project reveal in" data-rv data-tilt data-project="${project.id}" style="--i:${index + 1};--glow:${project.glow}" tabindex="0" role="button" aria-label="${openLabel} ${project.title}">
+  <article class="project reveal" data-rv data-tilt data-project="${project.id}" style="--i:${index + 1};--glow:${project.glow}" tabindex="0" role="button" aria-label="${openLabel} ${project.title}">
     <div class="project__glow"></div>
     <header class="project__head">
       <span class="project__year">${project.year}</span>
@@ -111,7 +111,7 @@ function renderSkills(locale: Locale): void {
   host.innerHTML = skills
     .map(
       (skill, index) => `
-  <div class="skill reveal in" data-rv data-scene-target="skill-${index}" style="--i:${(index % 4) + 1}">
+  <div class="skill reveal" data-rv data-scene-target="skill-${index}" style="--i:${(index % 4) + 1}">
     <span class="skill__icon" aria-hidden="true">${skill.icon}</span>
     <span class="skill__name">${skill.name}</span>
     <span class="skill__level">${skill.level[locale]}</span>

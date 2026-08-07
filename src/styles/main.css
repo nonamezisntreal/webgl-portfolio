@@ -593,15 +593,19 @@ html[lang='en'] .lang-toggle::before { transform: translateX(100%); }
   letter-spacing: -0.02em;
 }
 
-/* ── Reveal animation ─────────────────────────────────────── */
-.reveal {
+/* ── Reveal animation ─────────────────────────────────────────
+   The stylesheet hides nothing on its own. Content is held back only once the
+   runtime has armed it, and the runtime arms only what it is about to reveal —
+   so a page whose bundle is slow, blocked or broken still reads, which is the
+   promise the hero already keeps. */
+.reveal--armed {
   opacity: 0;
   transform: translateY(28px);
   transition: opacity 0.9s var(--ease-out), transform 0.9s var(--ease-out);
   transition-delay: calc(var(--i, 0) * 90ms);
 }
 
-.reveal.in {
+.reveal--armed.in {
   opacity: 1;
   transform: none;
 }
@@ -1592,7 +1596,7 @@ html[lang='en'] .lang-toggle::before { transform: translateX(100%); }
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-  .reveal { opacity: 1; transform: none; }
+  .reveal, .reveal--armed { opacity: 1; transform: none; }
   /* the hero arrives already open: its staged beats are motion, not content */
   .hero .reveal,
   .hero__title .reveal { animation: none; clip-path: none; }

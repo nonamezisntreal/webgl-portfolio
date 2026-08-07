@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 const root = resolve(process.env.PROJECT_ROOT ?? process.cwd());
-const [particles, rings, core, postFx, experience, nodes, motion, sceneNodes, sceneNav, intro, scroll, projects, styles, indexHtml] = await Promise.all([
+const [particles, rings, core, postFx, experience, nodes, motion, sceneNodes, sceneNav, intro, scroll, projects, reveal, render, styles, indexHtml] = await Promise.all([
   readFile(resolve(root, 'src/webgl/Particles.ts'), 'utf8'),
   readFile(resolve(root, 'src/webgl/Rings.ts'), 'utf8'),
   readFile(resolve(root, 'src/webgl/Core.ts'), 'utf8'),
@@ -15,6 +15,8 @@ const [particles, rings, core, postFx, experience, nodes, motion, sceneNodes, sc
   readFile(resolve(root, 'src/ui/intro.ts'), 'utf8'),
   readFile(resolve(root, 'src/ui/scroll.ts'), 'utf8'),
   readFile(resolve(root, 'src/ui/projects.ts'), 'utf8'),
+  readFile(resolve(root, 'src/ui/reveal.ts'), 'utf8'),
+  readFile(resolve(root, 'src/ui/render.ts'), 'utf8'),
   readFile(resolve(root, 'src/styles/main.css'), 'utf8'),
   readFile(resolve(root, 'index.html'), 'utf8'),
 ]);
@@ -122,6 +124,15 @@ for (const [label, source] of [['Experience.ts', experience], ['Core.ts', core],
 }
 assert(/const drifting = immediate \? 0 : delta;/u.test(rings), 'A lone static render must not accumulate the ring drift.');
 assert(/const delta = SETTLE_STEP;/u.test(experience), 'The static render must settle the scene rather than step it once.');
+
+/* Reveals: the stylesheet must not be able to hide content on its own, and
+   every section must reveal the same way. */
+assert(!/\.reveal\s*\{[^}]*opacity:\s*0/u.test(styles), 'The stylesheet hides content the runtime may never arrive to unhide.');
+assert(/\.reveal--armed \{[^}]*opacity: 0;/u.test(styles) && /\.reveal--armed\.in \{/u.test(styles), 'The armed reveal state is missing.');
+assert(/element\.classList\.add\('reveal--armed'\)/u.test(reveal), 'The runtime must be the thing that holds content back.');
+assert(/if \(element\.getBoundingClientRect\(\)\.top < window\.innerHeight\) continue;/u.test(reveal), 'Content already on screen must not be taken away to be brought back.');
+assert(!/reveal in/u.test(render), 'Runtime-rendered cards must reveal like the rest of the page, not arrive already revealed.');
+assert(/data-rv/u.test(render), 'Runtime-rendered cards must still opt into the reveal.');
 
 assert(/scrollToElement\(/u.test(sceneNav), 'Scene selection must resolve to ordinary page navigation.');
 assert(/assertSceneTargets\(/u.test(sceneNav), 'Scene navigation must fail closed when a DOM target is missing or ambiguous.');
