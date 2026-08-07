@@ -61,9 +61,18 @@ assert(/function arrivalOrder\(formation: Formation/u.test(nodes), 'Formations l
 assert(/case 'pillars':\s*case 'ring':\s*case 'spiral':\s*return t;/u.test(nodes), 'Ordered formations must assemble along their own index.');
 assert(/case 'lattice':\s*return 1 - weight;/u.test(nodes), 'The lattice must land its strongest node first.');
 assert(/state\.order = arrivalOrder\(scene\.formation/u.test(nodes), 'Section changes must re-derive the assembly order.');
-assert(/state\.origin\.copy\(state\.current\);\s*state\.travel = 0;/u.test(nodes), 'An interrupted re-formation must set out from where the nodes actually stand.');
+assert(/state\.origin\.copy\(state\.current\);\s*state\.originScale = state\.targetScale;\s*state\.travel = 0;/u.test(nodes), 'An interrupted re-formation must set out from where the nodes actually stand, at the size they stand at.');
 assert(/state\.travel = 1;\s*state\.current\.copy\(state\.target\)/u.test(nodes), 'A static render must complete the re-formation instead of freezing it mid-flight.');
 assert(/\(state\.travel - state\.order \* REFORM_STAGGER\) \/ \(1 - REFORM_STAGGER\)/u.test(nodes), 'The stagger must delay a node rather than shorten how long it moves.');
+assert(/size = THREE\.MathUtils\.lerp\(state\.originScale, state\.targetScale, eased\)/u.test(nodes), 'A node leaving a section must be carried home rather than fade out where it stands.');
+assert(/get settled\(\): boolean/u.test(nodes), 'The scene must be able to say when a formation has finished gathering.');
+
+/* The page ends on a beat, and that beat is a per-frame decay like every other. */
+assert(/this\.closing = name === 'contact'/u.test(experience), 'The last section no longer arms the closing beat.');
+assert(/if \(name !== this\.section\) this\.closed = false;/u.test(experience), 'Leaving and returning to the end must re-arm the closing beat exactly once.');
+assert(/if \(!this\.closing \|\| this\.closed \|\| !this\.nodes\.settled\) return;/u.test(experience), 'The ending must wait for the constellation to gather, and must not repeat.');
+assert(/private finale\(\): void \{\s*if \(this\.disposed \|\| this\.contextLost \|\| this\.reducedMotion\) return;/u.test(experience), 'Reduced motion must not fire the closing decay it renders no frames for.');
+assert(/this\.closeIfSettled\(\);/u.test(experience), 'The frame loop no longer checks for the ending.');
 
 assert(/from '\.\/content'/u.test(sceneNodes), 'Scene node registry must derive its labels from the content registry.');
 assert(/data-scene-target/u.test(sceneNodes) && !/nth-child/u.test(sceneNodes), 'Scene targets must use stable identifiers rather than positional selectors.');

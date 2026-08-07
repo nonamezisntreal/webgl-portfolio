@@ -175,6 +175,66 @@ assert(privateValue<number>(interaction, 'hoverIndex') === 0 && fakeHovered === 
 interaction.hint(false);
 assert(privateValue<number>(interaction, 'hoverIndex') === 0 && fakeHovered === 0, 'The expired hint timer cleared a newer DOM hover.');
 
+/* The page ends on a beat, and that beat waits for the constellation to get
+   home, fires once, and re-arms only when the visitor leaves and comes back. */
+function endingHarness(reducedMotion: boolean) {
+  const struck: number[] = [];
+  const experience = Object.create(Experience.prototype) as Experience;
+  const nodeStub = { settled: false, activeNodes: [], setSection() {}, setSelected() {}, setPull() {}, setHovered() {} };
+  Object.assign(experience as unknown as Record<string, unknown>, {
+    disposed: false,
+    contextLost: false,
+    reducedMotion,
+    section: 'skills',
+    closing: false,
+    closed: false,
+    hintIndex: -1,
+    hoverIndex: -1,
+    domHoverIndex: -1,
+    focusIndex: -1,
+    focusHold: 0,
+    scenes: { skills: { formation: 'lattice', nodes: [] }, contact: { formation: 'collapse', nodes: [] } },
+    nodes: nodeStub,
+    targetSectionOffset: new THREE.Vector3(),
+    coreCenter: new THREE.Vector3(),
+    cameraFacing: new THREE.Vector3(),
+    atmosphereColor: new THREE.Color(),
+    camera: new THREE.PerspectiveCamera(),
+    core: { group: new THREE.Group(), impact: (_: THREE.Vector3, strength: number) => struck.push(strength) },
+    particles: { impulse() {} },
+    rings: { pulse() {} },
+    postfx: { flash() {}, setAtmosphere() {} },
+    renderOnce() {},
+  });
+  const settle = () => {
+    nodeStub.settled = true;
+    (experience as unknown as { closeIfSettled(): void }).closeIfSettled();
+  };
+  return { experience, nodeStub, struck, settle };
+}
+
+const ending = endingHarness(false);
+ending.experience.setSection('contact');
+(ending.experience as unknown as { closeIfSettled(): void }).closeIfSettled();
+assert(ending.struck.length === 0, 'The ending played before the constellation had gathered.');
+ending.settle();
+assert(ending.struck.length === 1, 'Reaching the end of the page played no closing beat.');
+ending.settle();
+assert(ending.struck.length === 1, 'The closing beat repeated itself while the visitor stayed put.');
+ending.nodeStub.settled = false;
+ending.experience.setSection('skills');
+ending.settle();
+assert(ending.struck.length === 1, 'The closing beat fired on a section that is not the end.');
+ending.nodeStub.settled = false;
+ending.experience.setSection('contact');
+ending.settle();
+assert(ending.struck.length === 2, 'Leaving the end and returning to it never re-armed the closing beat.');
+
+const stillEnding = endingHarness(true);
+stillEnding.experience.setSection('contact');
+stillEnding.settle();
+assert(stillEnding.struck.length === 0, 'Reduced motion fired a per-frame decay it renders no frames for.');
+
 const undersized = new Nodes(colorA, colorB, 1);
 let overflowRejected = false;
 try {
@@ -184,4 +244,4 @@ try {
 }
 assert(overflowRejected, 'Node capacity overflow was silently truncated instead of rejected.');
 
-console.log('Scene runtime regression tests passed: shared delta decay, static reduced motion, full capacity, ordered assembly, bounded reach, reversible passage, hint replacement and overflow rejection.');
+console.log('Scene runtime regression tests passed: shared delta decay, static reduced motion, full capacity, ordered assembly, re-armable ending, bounded reach, reversible passage, hint replacement and overflow rejection.');

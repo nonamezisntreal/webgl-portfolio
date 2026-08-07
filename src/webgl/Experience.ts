@@ -100,6 +100,10 @@ export class Experience {
   private focusHold = 0;
   private focusWeight = 0;
   private elapsedTime = 0;
+  private section = 'hero';
+  /** The page is on its last section, and whether that ending has been played. */
+  private closing = false;
+  private closed = false;
 
   private readonly reducedMotion: boolean;
   private readonly isLowPower: boolean;
@@ -198,6 +202,11 @@ export class Experience {
   }
 
   setSection(name: string): void {
+    // arriving at the last section arms the closing beat; leaving it re-arms
+    this.closing = name === 'contact';
+    if (name !== this.section) this.closed = false;
+    this.section = name;
+
     const offsets: Record<string, [number, number, number]> = {
       hero: [0, 0, 0],
       about: [1.4, 0.25, 0.4],
@@ -309,6 +318,31 @@ export class Experience {
     this.particles.impulse(0.65);
     this.rings.pulse(0.9);
     this.postfx.flash(0.55);
+  }
+
+  /**
+   * The closing beat, played once the constellation has gathered back into the
+   * core at the end of the page. It is the opening ignition run quieter: the
+   * same strike down the camera axis, answering the arrival instead of
+   * announcing it. Like every other strike it decays per frame, so reduced
+   * motion — which renders no continuous frames — never fires it.
+   */
+  private closeIfSettled(): void {
+    // the ending belongs to the moment the last node gets home, not to the
+    // moment the section changed
+    if (!this.closing || this.closed || !this.nodes.settled) return;
+    this.closed = true;
+    this.finale();
+  }
+
+  private finale(): void {
+    if (this.disposed || this.contextLost || this.reducedMotion) return;
+    this.core.group.getWorldPosition(this.coreCenter);
+    this.cameraFacing.copy(this.camera.position).sub(this.coreCenter).normalize();
+    this.core.impact(this.cameraFacing, 0.5);
+    this.particles.impulse(0.4);
+    this.rings.pulse(0.7);
+    this.postfx.flash(0.28);
   }
 
   /** Drop any node focus and let the camera return to its scroll position. */
@@ -693,6 +727,7 @@ export class Experience {
     this.rings.setPassage(this.passage);
     this.rings.update(time, delta, this.smoothMouse, this.scroll);
     this.nodes.update(time, delta, this.scroll);
+    this.closeIfSettled();
     this.updatePicking();
     this.postfx.render(time, delta);
 

@@ -14,6 +14,8 @@ interface NodeState {
   targetScale: number;
   hover: number;
   targetHover: number;
+  /** The size the node held when the section last changed. */
+  originScale: number;
   /** 0..1 progress of the re-formation this node is part of. */
   travel: number;
   /** 0..1 place in the assembly order of its formation. */
@@ -163,6 +165,7 @@ export class Nodes {
         targetScale: 0,
         hover: 0,
         targetHover: 0,
+        originScale: 0,
         travel: 1,
         order: 0,
         phase: (i * GOLDEN_ANGLE) % (Math.PI * 2),
@@ -176,6 +179,12 @@ export class Nodes {
   /** Nodes currently represented in the scene, in instance order. */
   get activeNodes(): readonly SceneNode[] {
     return this.visible;
+  }
+
+  /** True once every node has finished the move its section asked for. */
+  get settled(): boolean {
+    for (const state of this.states) if (state.travel < 1) return false;
+    return true;
   }
 
   /** Re-form the constellation for a section; unused instances collapse into the core. */
@@ -194,6 +203,7 @@ export class Nodes {
       // the move is measured from wherever the node stands, so an interrupted
       // re-formation carries on from where it got to rather than snapping back
       state.origin.copy(state.current);
+      state.originScale = state.targetScale;
       state.travel = 0;
 
       if (!node) {
@@ -255,6 +265,7 @@ export class Nodes {
     for (let i = 0; i < this.states.length; i++) {
       const state = this.states[i];
 
+      let size = state.targetScale;
       if (immediate) {
         state.travel = 1;
         state.current.copy(state.target);
@@ -266,7 +277,11 @@ export class Nodes {
         const moved = THREE.MathUtils.clamp(
           (state.travel - state.order * REFORM_STAGGER) / (1 - REFORM_STAGGER), 0, 1,
         );
-        state.current.lerpVectors(state.origin, state.target, 1 - Math.pow(1 - moved, 3));
+        const eased = 1 - Math.pow(1 - moved, 3);
+        state.current.lerpVectors(state.origin, state.target, eased);
+        // size rides the same curve as the move, so a node leaving a section is
+        // visibly carried home instead of going out where it stands
+        size = THREE.MathUtils.lerp(state.originScale, state.targetScale, eased);
         state.hover += (state.targetHover - state.hover) * 0.14;
       }
 
@@ -274,7 +289,7 @@ export class Nodes {
         ? immediate ? 0.18 : 0.18 + Math.sin(time * 4) * 0.06
         : 0;
       const breathe = immediate ? 1 : 1 + Math.sin(time * 0.9 + state.phase) * 0.05;
-      const wanted = state.targetScale * breathe * fade * (1 + state.hover * 0.85 + selectedPulse);
+      const wanted = size * breathe * fade * (1 + state.hover * 0.85 + selectedPulse);
       if (immediate) state.scale = wanted;
       else state.scale += (wanted - state.scale) * 0.09;
 
